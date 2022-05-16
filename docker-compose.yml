@@ -1,0 +1,23 @@
+version: '3.7'
+services:
+
+   zemond:
+      image: r0nam1/zemond:test
+      container_name: zemond
+      environment:
+        - TZ=America/Los_Angles
+        - CAMERA_URL=rtsp://user:password@10.0.0.0:554
+        - CLIP_SIZE=1073741824 # 1 Gigabyte
+        #- CLIP_SIZE=268435456 #256 Megabytes
+        #- CLIP_SIZE=16777216 # 16 Megabytes
+        - CLIP_LIMIT=5
+        - CAMERA_NAME=Camera
+      volumes:
+        # Where to store the shell files
+        - ./zemond/:/zemond/
+        # Where to store video
+        - ./zemond-storage:/zemond-storage
+      restart: unless-stopped
+      ports:
+         #RTSP
+        - "8554:8554"
