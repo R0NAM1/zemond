@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+
+
+
+<center>
+<form name='myForm' method="post" action="{{ url_for('addCamera') }}" style='text-align: center;'>
+  <p>Add Camera Using ONVIF AutoConfig</p>
+  <p>Name</p>
+  <input type="text" name="cameraname" placeholder='Cameras Name' required ></input>
+  <p>ONVIF URL</p>
+  <input type="text" name="onvifURL" placeholder='ONVIF URL' required ></input>
+  <p>(ONVIF URL is by standard http(s)://ip.addr/onvif/device_service)</p>
+  <p>Username</p>
+  <input type="text" name="username" placeholder='Cameras Username' required></input>
+  <p>Password</p>
+  <input type="password" name="password" placeholder='Cameras Password' required></input>
+  <br><br>
+  <input type="submit" value="Add Camera"></input>
+   <a href="{{ url_for('settings') }}" class='button_link'>Cancel</a>
+</form>
+
+{% for mesg in get_flashed_messages() %}
+<h1>{{ mesg }}</h1>
+{% endfor %}
+
+</center>
+
+
+
+
+
+{% endblock %}

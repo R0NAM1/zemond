@@ -1,0 +1,15 @@
+{
+  "name": "zemond",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "mediasoup-client-aiortc": "^3.7.1",
+    "webrtc-adapter": "^8.2.0"
+  }
+}

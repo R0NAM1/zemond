@@ -1,0 +1,78 @@
+
+###############################################
+# General parameters
+
+# Sets the verbosity of the program; available values are "error", "warn", "info", "debug".
+logLevel: info
+# Destinations of log messages; available values are "stdout", "file" and "syslog".
+logDestinations: [stdout]
+# If "file" is in logDestinations, this is the file which will receive the logs.
+logFile: rtsp-simple-server.log
+
+# Timeout of read operations.
+readTimeout: 10s
+# Timeout of write operations.
+writeTimeout: 10s
+# Number of read buffers.
+# A higher number allows a wider throughput, a lower number allows to save RAM.
+readBufferCount: 1024
+
+# HTTP URL to perform external authentication.
+# Every time a user wants to authenticate, the server calls this URL
+# with the POST method and a body containing:
+# {
+#   "ip": "ip",
+#   "user": "user",
+#   "password": "password",
+#   "path": "path",
+#   "action": "read|publish"
+#   "query": "url's raw query"
+# }
+# If the response code is 20x, authentication is accepted, otherwise
+# it is discarded.
+externalAuthenticationURL:
+
+# Enable the HTTP API.
+api: no
+# Address of the API listener.
+apiAddress: 127.0.0.1:9997
+
+# Enable Prometheus-compatible metrics.
+metrics: no
+# Address of the metrics listener.
+metricsAddress: 127.0.0.1:9998
+
+# Enable pprof-compatible endpoint to monitor performances.
+pprof: no
+# Address of the pprof listener.
+pprofAddress: 127.0.0.1:9999
+
+# Command to run when a client connects to the server.
+# This is terminated with SIGINT when a client disconnects from the server.
+# The following environment variables are available:
+# * RTSP_PORT: server port
+runOnConnect:
+# Restart the command if it exits suddenly.
+runOnConnectRestart: no
+
+###############################################
+# RTSP parameters
+
+# Disable support for the RTSP protocol.
+rtspDisable: no
+# List of enabled RTSP transport protocols.
+# UDP is the most performant, but doesn't work when there's a NAT/firewall between
+# server and clients, and doesn't support encryption.
+# UDP-multicast allows to save bandwidth when clients are all in the same LAN.
+# TCP is the most versatile, and does support encryption.
+# The handshake is always performed with TCP.
+protocols: [tcp]
+# Encrypt handshake and TCP streams with TLS (RTSPS).
+# Available values are "no", "strict", "optional".
+encryption: "no"
+# Address of the TCP/RTSP listener. This is needed only when encryption is "no" or "optional".
+rtspAddress: :8554
+
+rtmpDisable: yes
+
+hlsDisable: yes

@@ -1,0 +1,142 @@
+A simple guide on how RTSP works at the socket (packet) level, the order of operations needed, such and such.
+(Digest Authentication Only: https://en.wikipedia.org/wiki/Digest_access_authentication)
+===R0NAM1 2022===
+
+(The RTSP Packet Type is plaintext based, encoded in UTF-8, when media play starts, RTP is what is transferred, RTSP is a COMMUNICATION meathod for RTP)
+
+1. Client reaches out to server, sends a packet of the following structure:
+OPTIONS rtsp://10.x.x.x:554 RTSP/1.0
+CSeq: 1
+User-Agent: myProgram
+
+
+
+2. Server will respond to the client, usually it is such:
+RTSP/1.0 401 Unauthorized
+CSeq: 1
+WWW-Authenticate: Digest realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844"
+
+(This gives us a few things we need to reply, the Authentication type since it's 401 Unauthorized, is Digest. We also have the realm, and nonce (A random number per transaction, calculated per response)
+
+
+3. We can now authenticate, sending this structure:
+OPTIONS rtsp://10.x.x.x:554 RTSP/1.0
+CSeq: 2
+User-Agent: myProgram
+Authorization: Digest username="admin", realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844", uri="rtsp://10.x.x.x:554", response="2377de66c66bf2ea7699038b93f196db"
+
+(We see CSeq changed to 2, since this is the second packet were sending in this communication, we increase this. We also include the authentication type, the username, nonce, uri, and response.)
+
+But, what is response?
+
+Response is usually a checksum of all the infomation in the packet, calculated by the server to ensure the infomation isn't corrupted. It's calculated as such:
+HA1 = MD5(username:realm:password)
+HA2 = MD5(method:digestURI)
+response = MD5(HA1:nonce:HA2)
+
+Using that we can then actually communicate with RTSP.
+
+4. We now receive a packet from the server, as such:
+RTSP/1.0 200 OK
+CSeq: 2
+Server: Rtsp Server/3.0
+Public: OPTIONS, DESCRIBE, ANNOUNCE, SETUP, PLAY, RECORD, PAUSE, TEARDOWN, SET_PARAMETER, GET_PARAMETER
+
+5. With all these options, next we should send this one to the server:
+DESCRIBE rtsp://10.x.x.x:554 RTSP/1.0
+Accept: application/sdp
+CSeq: 3
+User-Agent: myProgram
+Authorization: Digest username="admin", realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844", uri="rtsp://10.x.x.x:554", response="95d7dc908aae08d6be530d13aa1b8ee7"
+
+(SDP is the Session Description Protocol)
+
+6. From Describe we get this from the server:
+RTSP/1.0 200 OK
+CSeq: 3
+x-Accept-Dynamic-Rate: 1
+Content-Base: rtsp://10.x.x.x:554/
+Cache-Control: must-revalidate
+Content-Length: 456
+Content-Type: application/sdp
+
+v=0
+o=- 2252699665 2252699665 IN IP4 0.0.0.0
+s=Media Server
+c=IN IP4 0.0.0.0
+t=0 0
+a=control:*
+a=packetization-supported:DH
+a=rtppayload-supported:DH
+a=range:npt=now-
+m=video 0 RTP/AVP 96
+a=control:trackID=0
+a=framerate:8.000000
+a=rtpmap:96 H264/90000
+a=fmtp:96 packetization-mode=1;profile-level-id=4D4033;sprop-parameter-sets=Z01AM6aAKID1+VAA,aO48gAA=
+a=recvonly
+m=audio 0 RTP/AVP 8
+a=control:trackID=1
+a=rtpmap:8 PCMA/8000
+a=recvonly
+
+(Bit bigger this time, this one, but now having out codec information we can SETUP out session)
+
+7. Client to server, SETUP:
+SETUP rtsp://10.x.x.x:554/trackID=0 RTSP/1.0
+Transport: RTP/AVP/UDP;unicast;client_port=14362-14363
+x-Dynamic-Rate: 0
+CSeq: 4
+User-Agent: myProgram
+Authorization: Digest username="admin", realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844", uri="rtsp://10.x.x.x:554/trackID=0", response="b4fe69858a63eaf21630528b23363906"
+
+(Here we get trackID from a=control, then some transport stuff, and what ports to send the RTP stream to.)
+
+8. The server gives us this:
+RTSP/1.0 200 OK
+CSeq: 4
+Session: 1188118121911;timeout=60
+Transport: RTP/AVP/UDP;unicast;client_port=14362-14363;server_port=32026-32027;ssrc=3256F533
+x-Dynamic-Rate: 1
+
+(Here we get the Session ID, and server port to the RTP will be on, but that's just video however. We now need to setup the second track, the audio track)
+
+9. We send the following setup:
+SETUP rtsp://10.x.x.x:554/trackID=1 RTSP/1.0
+Transport: RTP/AVP/UDP;unicast;client_port=14364-14365
+x-Dynamic-Rate: 0
+CSeq: 5
+User-Agent: myProgram
+Session: 1188118121911
+Authorization: Digest username="admin", realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844", uri="rtsp://10.x.x.x:554/trackID=1", response="536e1f864bd8a44d814e9d0987095c64"
+
+(Here we also include the Session ID, so the server does know we want to bind the two)
+
+10. The server should send back the following:
+RTSP/1.0 200 OK
+CSeq: 5
+Session: 1188118121911;timeout=60
+Transport: RTP/AVP/UDP;unicast;client_port=14364-14365;server_port=32028-32029;ssrc=51B45CE5
+x-Dynamic-Rate: 1
+
+11. Now we can finally hit PLAY, so to say.
+PLAY rtsp://10.x.x.x:554/ RTSP/1.0
+Range: npt=0.000-
+CSeq: 6
+User-Agent: myProgram
+Session: 1188118121911
+Authorization: Digest username="admin", realm="Login to Amcrest", nonce="8c13dafe80d4358778862c09cfef2844", uri="rtsp://10.x.x.x:554/", response="4e7f2904ba281d1c5ea74c5d6525236d"
+
+12. We then get back:
+RTSP/1.0 200 OK
+CSeq: 6
+Session: 1188118121911
+Range: npt=0.000000-
+RTP-Info: url=trackID=0;seq=45688;rtptime=4036649103,url=trackID=1;seq=20063;rtptime=3413070451
+
+BUT THEN WHOOOM, we can a stream of RTP packets to out client from the RTSP server, Sending from the communicated server port to the communicated client port.
+Then we can do whatever we want with the RTP stream! (This includes being written to disk, or sending through an RTC client and do WebRTC!)
+
+
+
+	

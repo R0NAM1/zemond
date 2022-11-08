@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+    <p>Your Camera Models:</p>
+    <table border="1px solid black;"
+        border-collapse"collapse;"
+        margin-left="auto;"
+        margin-right="auto;">
+        <tr>
+            <th>Model Number</th>
+            <th>Manufacturer</th>
+            <th>Has PTZ?</th>
+            <th>Has Two Way Audio?</th>
+            <th>Image</th>
+        </tr>
+        {% for row in data %}
+        <tr>
+            <td>{{ row[0] }}</td>
+            <td>{{ row[1] }}</td>
+            <td>{{ row[2] }}</td>
+            <td>{{ row[3] }}</td>
+            <td><img src="data:image/png;charset=utf-8;base64, {{ row[4] }}" width="125"/>
+                <br><br>
+                <form method="post" enctype="multipart/form-data">
+                    <input type="file" name="cameraimage">
+                    <button type="submit" name="submit_button" value={{ row[0] }}>Upload</button>
+                 </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+{% endblock %}

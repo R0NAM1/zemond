@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+
+    <div> <b>{{ data[0] }}</b>                   <b>{{ data[6] }} {{ data[7] }}</b> </div>
+
+
+
+    <script type="module" src="{{url_for('static', filename='node_modules/webrtc-adapter/out/adapter.js')}}"></script>
+
+
+    <div id="media">
+        <audio id="audio" autoplay="true"></audio>
+        <video controls="true" muted id="video" autoplay="true" playsinline="true" width="750"></video>
+    </div> 
+    
+    <!--poster="{{url_for('static', filename='/pictures/loading.gif')}}"-->
+
+    <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
+
+    <div> {{ data }} </div>
+
+{% endblock %}
