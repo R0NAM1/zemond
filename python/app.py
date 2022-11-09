@@ -4,6 +4,7 @@ from functools import wraps
 from bs4 import BeautifulSoup
 from io import BytesIO
 from threading import Thread, active_count
+from waitress import serve # Production server
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64
 
 # WebRTC
@@ -523,5 +524,8 @@ if __name__ == '__main__':
     # Start Snapshot Thread.
     snapshotThread = Thread(target=updateSnapshots)
     snapshotThread.start()
-    # Finally run web server
-    app.run(host='0.0.0.0')
+    # Testing Web Server
+    # app.run(host='0.0.0.0')
+
+    # Production web server
+    serve(app, host='0.0.0.0', port=5000)

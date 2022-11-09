@@ -25,6 +25,9 @@ Beacause docker containers run under nat, unless explicitly stated to forward po
 
 7. We now need to build the base Docker Container that will host the camera, this can be done by running 'docker build . --tag zemond/cameramain:v1.0'
 
+8. We also need to use a STUN server for client connectivity, APT has a coturn package you can use, whichever way you decide to implement a STUN server or a TURN server, you need to set it in two places: app.py and webrtc-client.js
+In both search for the string 'nvr.internal.my.domain' and set it to your specific STUN server.
+
 
 # TODO
 
