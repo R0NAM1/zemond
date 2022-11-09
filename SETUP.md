@@ -11,7 +11,8 @@ Recommended to use Debian, GUI optional.
 
 2. Download the latest release and unpack the contents into the said directory.
 
-3. Make sure you have Docker and docker-compose installed along with python, don't worry about dependancies, as a Virtual Enviroment is provided.
+3. Make sure you have Docker and docker-compose installed along with python, install dependancies either system-wide, or with a Virutal Enviroment, which is preferred. (Run 'mkdir python/venv && python3 -m venv python/venv')
+Then run 'source python/venv/bin/activate' to enter the venv, and to install the dependancies run 'pip3 install -r requirements.txt'
 
 4. Make sure you have a storage directory configured, this can be the local files system, or anything you want. You can even treat it like cache.
 
