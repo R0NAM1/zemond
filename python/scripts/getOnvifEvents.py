@@ -22,25 +22,26 @@ print(initialTerminationTime)
 # Cleanup, unsubscribe to 5 streams
 
 def cleanup():
-  print("Unsubscribing from Subscriptions 0 - 4...")
-  payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:b="http://docs.oasis-open.org/wsn/b-2">
-  <soap:Header/>
-  <soap:Body>
-  <b:Unsubscribe>
-  <!--You may enter ANY elements at this point-->
-  </b:Unsubscribe>
-  </soap:Body>
-  </soap:Envelope>"""
-  # headers
-  headers = {
-    'Content-Type': 'text/xml; charset=utf-8'
-    }
-    # POST request
-  requests.request("POST", "http://ip.address/onvif/Subscription?Idx=0", headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
-  requests.request("POST", "http://ip.address/onvif/Subscription?Idx=1", headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
-  requests.request("POST", "http://ip.address/onvif/Subscription?Idx=2", headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
-  requests.request("POST", "http://ip.address/onvif/Subscription?Idx=3", headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
-  requests.request("POST", "http://ip.address/onvif/Subscription?Idx=4", headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
+   print("Unsubscribing from Subscriptions 0 - 20...")
+   payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:b="http://docs.oasis-open.org/wsn/b-2">
+   <soap:Header/>
+   <soap:Body>
+   <b:Unsubscribe>
+   <!--You may enter ANY elements at this point-->
+   </b:Unsubscribe>
+   </soap:Body>
+   </soap:Envelope>"""
+   # headers
+   headers = {
+      'Content-Type': 'text/xml; charset=utf-8'
+      }
+      # POST request
+   i = 0
+   while i < 20:
+      print(requests.request("POST", "http://ip.address/onvif/Subscription?Idx={0}".format(i), headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password)).text)
+      i = i + 1
+   
+   time.sleep(5)
 
 cleanup()
 
@@ -70,10 +71,6 @@ headers = {
 }
 # POST request
 response = requests.request("POST", url, headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
-  
-# prints the response
-# print(response.text)
-# print(response)
 
 print("Parsing XML Response...")
 print("")
@@ -100,14 +97,10 @@ print("Subscription Termination Time: " + subscriptionTerminationTime)
 # Everytime we loop, we can pull the last 5 Messages, for instance. The Request URL will now be the Subscription URL
 
 # We should pull these into a local DB, for both history and timestamping, 
-
-# while currentTimeEpoch < subscriptionTerminationTimeEpoch:
 while True:
-    # os.system('clear')
-    print ("Current Epoch Time: " + str(currentTimeEpoch))
-    # structured XML for PullMessages,
-    # Step 2, get all messages from Subscription, then wait for new messages, including motion events!
-    payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/events/wsdl">
+   # structured XML for PullMessages,
+   # Step 2, get all messages from Subscription, then wait for new messages, including motion events!
+   payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/events/wsdl">
    <soap:Header/>
    <soap:Body>
       <wsdl:PullMessages>
@@ -115,38 +108,58 @@ while True:
          <wsdl:MessageLimit>10</wsdl:MessageLimit>
          <!--You may enter ANY elements at this point-->
       </wsdl:PullMessages>
-    </soap:Body>
-    </soap:Envelope>"""
-    # headers
-    headers = {
-    'Content-Type': 'text/xml; charset=utf-8'
-    }
-    # POST request
-    # response = requests.request("POST", subscriptionURL, headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
+      </soap:Body>
+      </soap:Envelope>"""
+      # headers
+   headers = {
+      'Content-Type': 'text/xml; charset=utf-8'
+      }
+      # POST request
+   
+   print("Sending Request For Notification, Waiting For Response...")
+   
+   response = requests.request("POST", subscriptionURL, headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
     
-    response = """<?xml version="1.0" encoding="utf-8" standalone="yes" ?><s:Envelope xmlns:sc="http://www.w3.org/2003/05/soap-encoding" xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsa5="http://www.w3.org/2005/08/addressing" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:wstop="http://docs.oasis-open.org/wsn/t-1" xmlns:tns1="http://www.onvif.org/ver10/topics"><s:Header/><s:Body><tev:PullMessagesResponse><tev:CurrentTime>2022-10-12T00:09:40Z</tev:CurrentTime><tev:TerminationTime>2022-10-12T16:07:44Z</tev:TerminationTime><wsnt:NotificationMessage><wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:RuleEngine/CellMotionDetector/Motion</wsnt:Topic><wsnt:Message><tt:Message UtcTime="2022-10-12T00:09:40Z" PropertyOperation="Changed"><tt:Source><tt:SimpleItem Name="VideoSourceConfigurationToken" Value="00000"/><tt:SimpleItem Name="VideoAnalyticsConfigurationToken" Value="00000"/><tt:SimpleItem Name="Rule" Value="00000"/></tt:Source><tt:Data><tt:SimpleItem Name="IsMotion" Value="true"/></tt:Data></tt:Message></wsnt:Message></wsnt:NotificationMessage><wsnt:NotificationMessage><wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:VideoSource/MotionAlarm</wsnt:Topic><wsnt:Message><tt:Message UtcTime="2022-10-12T00:09:40Z" PropertyOperation="Changed"><tt:Source><tt:SimpleItem Name="Source" Value="00000"/></tt:Source><tt:Data><tt:SimpleItem Name="State" Value="true"/></tt:Data></tt:Message></wsnt:Message></wsnt:NotificationMessage></tev:PullMessagesResponse></s:Body></s:Envelope>"""
+   # print(response.text)
 
-    messagesXML =  BeautifulSoup(response, 'xml')
+   print("Got Response, Parsing And Dumping...")
 
-    messageType = parsedResponseXML.find_all('wsnt:Topic')
+   messagesXML =  BeautifulSoup(response.text, 'xml')
 
-    messageTime = parsedResponseXML.find_all('tt:Message')
+   # With XML Here, we need to break down the response into it's individual messages.
 
-    isDetectingMotion = parsedResponseXML.find("tt:SimpleItem", {"Name": "IsMotion"})
+   messages = messagesXML.find_all('NotificationMessage')
 
-    print(response)
-   #  print("")
-   #  print (messageType[0].text)
+   # Now we have each 'message' seperated, we can run a loop based on this:
 
-   #  if messageType == 'tns1:RuleEngine/CellMotionDetector/Motion':
-        
+   for message in messages:
+         # Parse Each message to a string, following the format: Topic | Time | Data
+          print("==========MESSAGE START===========")
 
-   #      if isDetectingMotion.get("Value") == 'true':
-   #          print("Motion Detected at " + messageTime.get("UtcTime"))
-   #          print("")
+          tmpXML = BeautifulSoup(str(message), 'xml')
 
-    # print(response.text)
-    currentTimeEpoch = (time.mktime(datetime.utcnow().timetuple()))
-    sleep(3)
+         #  print("Raw: " + str(tmpXML))
+
+          # Get Topic
+          thisTopic = tmpXML.find('Topic')
+          print("Topic: " + str(thisTopic.text))
+
+          # Get Time
+          thisTime = tmpXML.find('Message', {'UtcTime': True})
+          thisTime = thisTime.get('UtcTime')
+          print("Timestamp: " + str(thisTime))
+
+          # Get Data
+          thisData = tmpXML.find_all('SimpleItem')
+          # Itterate Over Data
+          i = 0
+          for items in thisData:        
+            thisObject = thisData[i].get('Name')
+            thisValue = thisData[i].get('Value')
+            print("Object: " + thisObject + " | Value: " + thisValue)
+            i = i + 1      
+
+          print("==========MESSAGE STOP============")
+          print("")
 
 
