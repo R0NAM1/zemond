@@ -3,11 +3,9 @@ FROM alpine:3.16.1
 MAINTAINER R0NAM1 r0nam1@toasty.cafe
 
 RUN apk update && \
-    apk add supervisor ffmpeg bash coreutils npm
+    apk add supervisor ffmpeg bash coreutils
 
 RUN rm -rf /var/cache/apk/*
-
-RUN npm install -g http-server
 
 COPY ./supervisord.conf /etc/supervisor/supervisord.conf
 

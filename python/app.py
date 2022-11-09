@@ -22,6 +22,8 @@ app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practive, g
 
 global snapshotCache;
 
+pingTime = {}
+
 # ONVIF URL STANDARD: http(s)://ip.address/onvif/device_serivce 
 
 # login required decorator
@@ -341,35 +343,47 @@ def viewCamera(cam):
 # This is what runs forever, while the client is connected,
 # MASSIVELY SCREWEY DUE TO ME NOT KNOWING HOW TO THREAD PROPERLY.
 
-def webRtcWatchdog():
-    global rtcloop
+def webRtcWatchdog(uuid, rtcloop):
     global pingTime
-    global webRTCThread
     global watchdog
     time.sleep(5) # Wait at least 5 seconds for client to connect.
     while True:
         time.sleep(1)
         # If timer exceeds value, then run thread.stop;
 
-        diffTime = float(time.time()) - float(pingTime)
+        # print("Current UUID for session is: " + str(uuid))
+
+        # print(pingTime[uuid])
+
+        diffTime = float(time.time()) - float(pingTime[uuid]) # Need to add a UUID along WITH pingtime so sessions don't intermix.
 
         # print("Diff Time: " + str(diffTime))
 
         if (diffTime > 5.0):
             print("Running Threads Before: " + str(active_count()))
-            rtcloop.stop()
-            webRTCThread.join()
+            rtcloop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
+            time.sleep(3) # Wait three seconds for code to stop executing...
+            rtcloop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
+            print("Running Threads After: " + str(active_count()))
             break
     print("Broken Watchdog, thread should be terminating now!")
 
-async def webRtcStart():
+async def webRtcStart(uuid):
+
+
+    global pingTime
+
+    thisUUID = uuid
+
+    # pingTime = {thisUUID: ""}
+
+    pingTime[thisUUID] = ""
     
     # Get current loop
     loop = asyncio.get_event_loop()
     
     global rtspCredString
     
-    pingTime = None
     # Set Media Source and decode offered data
     player = MediaPlayer(rtspCredString) # In the future the media source will be the local relay docker container that has the camera in question, instead of from the camera itself.
     params = ast.literal_eval((request.data).decode("UTF-8"))
@@ -390,7 +404,7 @@ async def webRtcStart():
         def on_message(message):
             global pingTime
             if isinstance(message, str) and message.startswith("ping"):
-                pingTime = time.time()
+                pingTime[thisUUID] = time.time()
                 channel.send("pong" + message[4:])
             elif ():
                 print("Closing Peer!")
@@ -422,20 +436,20 @@ async def webRtcStart():
 @login_required
 def webRTCOFFER():
 
-    global rtcloop
     global webRTCThread
     global watchdog
 
+    # When running to return a variable, we need to set a server side UUID so sessions don't get muxxed together.
 
-    # Get Event Loop If It Exists, Create It If Not.
-    try:
-        rtcloop = asyncio.get_event_loop()
-    except RuntimeError:
-        rtcloop = asyncio.new_event_loop()
-        asyncio.set_event_loop(rtcloop)
+    thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
+
+    # Always create a new event loop for this session.
+    rtcloop = asyncio.new_event_loop()
+    asyncio.set_event_loop(rtcloop)
         
     # Run an event into that loop until it's complete and returns a value
-    t = rtcloop.run_until_complete(webRtcStart())
+    t = rtcloop.run_until_complete(webRtcStart(thisUUID))
+    
 
     # Now create a timer that is reset by Ping-Pong.
 
@@ -443,12 +457,10 @@ def webRTCOFFER():
     # Another thread so we don't block the code.
     webRTCThread = Thread(target=rtcloop.run_forever)
     webRTCThread.start()
-    watchdog = Thread(target=webRtcWatchdog)
+    watchdog = Thread(target=webRtcWatchdog, args=(thisUUID, rtcloop, )) # Create a watchdog that takes the UUID and Event Loop
     watchdog.start()
 
-    print("Current Number Of Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
-    # we are not currently monitoring Ping-Pong, will impletent. What this currently means is the program is unusable in production
-    # with the cascading threads never being cleaned up. 
+    # print("Current Number Of Running Threads: " + str(active_count()))
     
     # Return Our Parsed SDP
     return t.encode()
