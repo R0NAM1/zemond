@@ -11,8 +11,21 @@ Recommended to use Debian, GUI optional.
 
 2. Download the latest release and unpack the contents into the said directory.
 
-3. Make sure you have Docker installed along with python, don't worry about dependancies, as a Virtual Enviroment is provided.
+3. Make sure you have Docker and docker-compose installed along with python, don't worry about dependancies, as a Virtual Enviroment is provided.
 
 4. Make sure you have a storage directory configured, this can be the local files system, or anything you want. You can even treat it like cache.
 
+5. We need to make a static network in docker now to host all the containers, we use a /16, which limits us to ~65,536 cameras. Each container will have a static address. Run the following:
+
+'docker network create --subnet=172.25.0.0/16 zemond-nat'
+
+Beacause docker containers run under nat, unless explicitly stated to forward ports. This means only the Zemond Host can communicate with these containers.
+
+6. Go ahead and spin up the database by editing docker-compose.yml and changing POSTGRES_PASSWORD to something unique, then running the command 'docker-compose up -d postgres-zemond'. This should bring it up on the address 172.25.0.2.
+
+7. We now need to build the base Docker Container that will host the camera, this can be done by running 'docker build . --tag zemond/cameramain:v1.0'
+
+
 # TODO
+
+To test the server, run 'python3 app.py'
