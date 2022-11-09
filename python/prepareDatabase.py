@@ -60,11 +60,10 @@ print("Making cameraEvents Table Now")
 
 # Create Table cameraEvents With Data
 cursor.execute("""CREATE TABLE IF NOT EXISTS cameraEvents (
-   name VARCHAR(50),
-   topic VARCHAR(50),
+   name VARCHAR(5000),
+   topic VARCHAR(5000),
    messagetime TIMESTAMP,
-   propertyoperation VARCHAR(50),
-   datastring VARCHAR(50)
+   data JSONB
 )""") #datastring formatted as name:value
 
 print("Making credentials Table Now")
