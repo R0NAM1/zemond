@@ -17,6 +17,10 @@
     
     <!--poster="{{url_for('static', filename='/pictures/loading.gif')}}"-->
 
+    <script type="text/javascript">
+        var cameraName = '{{ data[0] }}'
+     </script>
+
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
 
     <!--<div> {{ data }} </div>-->

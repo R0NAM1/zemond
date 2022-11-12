@@ -35,7 +35,7 @@ async function negotiate() {
         });
     }).then(function() {
         var offer = pc.localDescription; // Send our offer to the server in a JSON format, we expect a raw ANSWER, not encapsulated,
-        return fetch('/rtcoffer', {
+        return fetch('/rtcoffer/' + cameraName, {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,

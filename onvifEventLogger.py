@@ -65,7 +65,11 @@ response = requests.request("POST", "http://{0}/onvif/device_serivce".format(ipA
 
 parsedResponseXML = BeautifulSoup(response.text, 'xml')
 
-subscriptionURL = parsedResponseXML.find_all('wsa5:Address')[0].text
+try:
+   subscriptionURL = parsedResponseXML.find_all('wsa5:Address')[0].text
+except:
+   print("Assigning Subscription URL gave an exemption, should send a 'Camera Restart'")
+
 subscriptionResponseTime = parsedResponseXML.find_all('wsnt:CurrentTime')[0].text
 subscriptionTerminationTime = parsedResponseXML.find_all('wsnt:TerminationTime')[0].text
 

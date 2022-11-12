@@ -22,7 +22,7 @@ Then run 'source python/venv/bin/activate' to enter the venv, and to install the
 
 Beacause docker containers run under nat, unless explicitly stated to forward ports. This means only the Zemond Host can communicate with these containers.
 
-6. Go ahead and spin up the database by editing docker-compose.yml and changing POSTGRES_PASSWORD to something unique, then running the command 'docker-compose up -d postgres-zemond'. This should bring it up on the address 172.25.0.2.
+6. Go ahead and spin up the database by editing docker-compose.yml and changing POSTGRES_PASSWORD to something unique, then running the command 'docker-compose up -d postgres-zemond'. This should bring it up on the address 172.25.0.2. In globalFunctions.py, change the DB details to reflect your enviroment.
 
 7. We now need to build the base Docker Container that will host the camera, this can be done by running 'docker build . --tag zemond/cameramain:v1.0'
 

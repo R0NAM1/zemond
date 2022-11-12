@@ -16,6 +16,7 @@ from aiortc.rtcrtpsender import RTCRtpSender
 from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
+from dockerComposer import addRunningContainer
 
 app = Flask(__name__)
 
@@ -79,7 +80,7 @@ def cameraList():
     global snapshotCache
 
     # Unlike lastime to build the table this time we need to assemble the final tuple here in script
-    myCursor.execute("Select * from localcameras")
+    myCursor.execute("Select * from localcameras ORDER BY name DESC")
     localcameras = myCursor.fetchall()
     myCursor.execute("Select * from cameradb")
     cameradb = myCursor.fetchall()
@@ -215,6 +216,34 @@ def addCamera():
                                 myDatabase.commit()
                                 # Now we can get info and do all info scraping using ONVIF
                                 onvifAutoconfigure(cameraname)
+
+                                # After ONVIF autoconfigure is complete, create recording Docker Container.
+                                
+                                #Create RTSP Cred String:
+                                    # Get RTSP URL
+                                # Get Name's RTSP URI with username and password
+                                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
+                                currentiurl = myCursor.fetchone()
+                                currentiurlString = ''.join(currentiurl)
+                                # Get Current Camera's Username
+                                myCursor.execute("Select username from localcameras where name='{0}'".format(cameraname))
+                                currentiusername = myCursor.fetchone()
+                                currentiusernameString = ''.join(currentiusername)
+                                # Get Current Camera's Password
+                                myCursor.execute("Select password from localcameras where name='{0}'".format(cameraname))
+                                currentipassword = myCursor.fetchone()
+                                currentipasswordString = ''.join(currentipassword)
+
+                                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
+                                rtspurl =  myCursor.fetchone()
+                                rtspurl =  ''.join(rtspurl)
+                                rtspurl2 = rtspurl.replace("rtsp://", "")
+                                ip, port = rtspurl2.split(":", 1)
+                                port = port.split("/", 1)[0]
+                                address, params = rtspurl.split("/cam", 1)
+                                rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
+                               
+                                addRunningContainer(cameraname, rtspCredString, "268435456", "48")
                                 return redirect(url_for('dashboard'))
 
     return render_template('add_camera.html')
@@ -291,19 +320,7 @@ def viewCamera(cam):
     camdata = camtuple[0]
     # Currently passing through the raw DB query.
 
-    # Get RTSP URL
-    # Get Name's RTSP URI with username and password
-    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cam))
-    currentiurl = myCursor.fetchone()
-    currentiurlString = ''.join(currentiurl)
-    # Get Current Camera's Username
-    myCursor.execute("Select username from localcameras where name='{0}'".format(cam))
-    currentiusername = myCursor.fetchone()
-    currentiusernameString = ''.join(currentiusername)
-    # Get Current Camera's Password
-    myCursor.execute("Select password from localcameras where name='{0}'".format(cam))
-    currentipassword = myCursor.fetchone()
-    currentipasswordString = ''.join(currentipassword)
+   
 
     # Below is WEBRTC Code, it is partially complex, but not really.
     # Both the client and server implement 'RTCRemotePeer' and can exchange SDP with HTTP POST. Use that SDP with the Peer and you
@@ -312,23 +329,11 @@ def viewCamera(cam):
     # First we need to generate the raw datastream from the RTSP URL, we'll call another thread to do this, as it's temporary.
     # This writes a frame to the POST url buffer and consistantly updates it, 
 
-    # thr = threading.Thread(target=writeCameraImagePost(), args=(), kwargs={})
 
-    # Create httpurl
-    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cam))
-    #http://ip.address/onvif/device_service
-    rtspurl =  myCursor.fetchone()
-    rtspurl =  ''.join(rtspurl)
-    rtspurl2 = rtspurl.replace("rtsp://", "")
-    ip, port = rtspurl2.split(":", 1)
-    port = port.split("/", 1)[0]
-    address, params = rtspurl.split("/cam", 1)
 
-    # rtspHandler.handleRTSPtoGetRTP(ip, int(port), address, "zemondSecurity", currentiusernameString, cryptocode.decrypt(str(currentipasswordString), passwordRandomKey))
+    # Used to use RTSPCredString to connect to camera directly, now connecting to local RTSP proxy.
 
-    global rtspCredString
 
-    rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
 
     return render_template('view_camera.html', data=camdata)  
 
@@ -369,7 +374,7 @@ def webRtcWatchdog(uuid, rtcloop):
             break
     print("Broken Watchdog, thread should be terminating now!")
 
-async def webRtcStart(uuid):
+async def webRtcStart(uuid, dockerIP):
 
 
     global pingTime
@@ -382,11 +387,9 @@ async def webRtcStart(uuid):
     
     # Get current loop
     loop = asyncio.get_event_loop()
-    
-    global rtspCredString
-    
+        
     # Set Media Source and decode offered data
-    player = MediaPlayer(rtspCredString) # In the future the media source will be the local relay docker container that has the camera in question, instead of from the camera itself.
+    player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1") # In the future the media source will be the local relay docker container that has the camera in question, instead of from the camera itself.
     params = ast.literal_eval((request.data).decode("UTF-8"))
 
     # Set ICE Server to local server CURRENTLY STATIC
@@ -433,12 +436,18 @@ async def webRtcStart(uuid):
     return final
 
 # When we grab a WebRTC offer
-@app.route('/rtcoffer', methods=['GET', 'POST'])
+@app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
-def webRTCOFFER():
+def webRTCOFFER(cam):
 
     global webRTCThread
     global watchdog
+
+    # Get Docker IP
+    # Get Name's Docker IP with username and password
+    myCursor.execute("Select dockerIP from localcameras where name='{0}'".format(cam))
+    dockerIP = myCursor.fetchone()
+    dockerIPString = ''.join(dockerIP)
 
     # When running to return a variable, we need to set a server side UUID so sessions don't get muxxed together.
 
@@ -449,7 +458,7 @@ def webRTCOFFER():
     asyncio.set_event_loop(rtcloop)
         
     # Run an event into that loop until it's complete and returns a value
-    t = rtcloop.run_until_complete(webRtcStart(thisUUID))
+    t = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString))
     
 
     # Now create a timer that is reset by Ping-Pong.
@@ -496,9 +505,9 @@ def updateSnapshots():
             currentipasswordString = row[4]
 
             # Assemble Credential Based RTSP URL
-            rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
+            rtspCredString = 'rtsp://' + row[10] + ':8554/cam1'
 
-            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
             cap = cv2.VideoCapture(rtspCredString)
             
 

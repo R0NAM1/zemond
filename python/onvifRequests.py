@@ -41,3 +41,9 @@ GetRTSPURL = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelo
    </soap:Body>
 </soap:Envelope>"""
 
+restartCamera = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/device/wsdl">
+   <soap:Header/>
+   <soap:Body>
+      <wsdl:SystemReboot/>
+   </soap:Body>
+</soap:Envelope>"""
