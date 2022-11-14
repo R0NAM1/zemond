@@ -23,6 +23,28 @@
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
 
+    <link rel="stylesheet" href="{{url_for('static', filename='css/view_camera.css')}}">
+
     <!--<div> {{ data }} </div>-->
+
+    <table border="1px solid black;"
+        margin-left="auto;">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Topic</th>
+                <th>Data</th>
+            </tr>    
+        </thead>
+        <tbody>
+            {% for event in onvifevents %}
+            <tr>
+                <td>{{ event[2] }}</td>
+                <td>{{ event[1] }}</td>
+                <td>{{ event[3] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
 {% endblock %}

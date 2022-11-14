@@ -333,9 +333,17 @@ def viewCamera(cam):
 
     # Used to use RTSPCredString to connect to camera directly, now connecting to local RTSP proxy.
 
+    # We need to pass through a custom data string now, with Onvif Events as seperate string, both as follows:
+    # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
+    # 
+    # Onvif Events: Time | Topic | Data
 
+    # Get Onvif Events:
 
-    return render_template('view_camera.html', data=camdata)  
+    myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC".format(cam))
+    rawOnvifQuery = myCursor.fetchall()
+
+    return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery)  
 
 
 
