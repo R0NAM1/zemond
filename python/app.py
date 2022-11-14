@@ -80,7 +80,7 @@ def cameraList():
     global snapshotCache
 
     # Unlike lastime to build the table this time we need to assemble the final tuple here in script
-    myCursor.execute("Select * from localcameras ORDER BY name DESC")
+    myCursor.execute("Select * from localcameras ORDER BY name ASC")
     localcameras = myCursor.fetchall()
     myCursor.execute("Select * from cameradb")
     cameradb = myCursor.fetchall()

@@ -30,45 +30,69 @@ initialTerminationTime = initialTerminationTime.strftime('%Y-%m-%dT%H:%M:%SZ')
 # print(initialTerminationTime)
 
 # Subscribe to an ONVIF Stream
+success = False
 
 # structured XML for CreatePullPointSubscription,
 # Step 1, create a Event Subscription On Remote Camera, InitialTerminationTime will be now + one hour.
-payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/events/wsdl">
-   <soap:Header/>
-   <soap:Body>
-      <wsdl:CreatePullPointSubscription>
-         <!--Optional:-->
-         <wsdl:Filter>
-            <!--You may enter ANY elements at this point-->
-         </wsdl:Filter>
-         <!--Optional:-->
-         <wsdl:InitialTerminationTime>""" + initialTerminationTime + """</wsdl:InitialTerminationTime>
-         <!--Optional:-->
-         <wsdl:SubscriptionPolicy>
-            <!--You may enter ANY elements at this point-->
-         </wsdl:SubscriptionPolicy>
-         <!--You may enter ANY elements at this point-->
-      </wsdl:CreatePullPointSubscription>
-   </soap:Body>
-</soap:Envelope>"""
-# headers
-headers = {
-    'Content-Type': 'text/xml; charset=utf-8'
-}
-# POST request
-response = requests.request("POST", "http://{0}/onvif/device_serivce".format(ipAddress), headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
+while success == False:
+   try:
+      payload = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/events/wsdl">
+         <soap:Header/>
+         <soap:Body>
+            <wsdl:CreatePullPointSubscription>
+               <!--Optional:-->
+               <wsdl:Filter>
+                  <!--You may enter ANY elements at this point-->
+               </wsdl:Filter>
+               <!--Optional:-->
+               <wsdl:InitialTerminationTime>""" + initialTerminationTime + """</wsdl:InitialTerminationTime>
+               <!--Optional:-->
+               <wsdl:SubscriptionPolicy>
+                  <!--You may enter ANY elements at this point-->
+               </wsdl:SubscriptionPolicy>
+               <!--You may enter ANY elements at this point-->
+            </wsdl:CreatePullPointSubscription>
+         </soap:Body>
+      </soap:Envelope>"""
+      # headers
+      headers = {
+         'Content-Type': 'text/xml; charset=utf-8'
+      }
+      # POST request
+      response = requests.request("POST", "http://{0}/onvif/device_serivce".format(ipAddress), headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))
 
-# print("Parsing XML Response...")
-# print("")
-# print("")
-# print("")
+      # print("Parsing XML Response...")
+      # print("")
+      # print("")
+      # print("")
 
-parsedResponseXML = BeautifulSoup(response.text, 'xml')
+      parsedResponseXML = BeautifulSoup(response.text, 'xml')
 
-try:
-   subscriptionURL = parsedResponseXML.find_all('wsa5:Address')[0].text
-except:
-   print("Assigning Subscription URL gave an exemption, should send a 'Camera Restart'")
+
+
+      subscriptionURL = parsedResponseXML.find_all('wsa5:Address')[0].text
+   except:
+      print("Assigning Subscription URL gave an exemption, sending a 'Camera Restart' and waiting for 60 seconds.")
+
+      payload = '''<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver10/device/wsdl">
+      <soap:Header/>
+      <soap:Body>
+         <wsdl:SystemReboot/>
+      </soap:Body>
+      </soap:Envelope>'''
+      headers = {
+         'Content-Type': 'text/xml; charset=utf-8'
+         }
+      print((requests.request("POST", "http://{0}/onvif/device_serivce".format(ipAddress), headers=headers, data=payload, auth=HTTPDigestAuth(camera_username, camera_password))).text)
+
+      i = 0
+
+      while i < 80:
+             print(i)
+             time.sleep(1)
+             i = i + 1
+   else:
+      success = True
 
 subscriptionResponseTime = parsedResponseXML.find_all('wsnt:CurrentTime')[0].text
 subscriptionTerminationTime = parsedResponseXML.find_all('wsnt:TerminationTime')[0].text
