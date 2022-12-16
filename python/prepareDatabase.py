@@ -43,8 +43,8 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS localcameras (
    manufacturer VARCHAR(500) ,
    model VARCHAR(500),
    serialnumber VARCHAR(500) UNIQUE,
-   firmwareversion VARCHAR(500)
-   dockerIP VARCHAR(500) UNIQUE
+   firmwareversion VARCHAR(500),
+   dockerIP VARCHAR(500)
 );""")
 
 print("Making cameradb Table Now")
