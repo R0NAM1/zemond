@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+    <p>Delete Camera:</p>
+        {% for row in data %}
+            <h1 style="cursor:pointer;" onclick="deleteCameraConfirm('{{ row[0] }}')">&#x2022; {{ row[0] }}</h1>
+            <h1>----------------------------------------</h1>
+        {% endfor %}
+
+
+<script type="text/javascript">
+    var cameraNames = '{{ data }}'
+</script>
+    
+<script src="{{url_for('static', filename='js/delete_camera.js')}}"></script>
+<link rel="stylesheet" href="{{url_for('static', filename='css/delete_camera.css')}}">
+
+<!-- Apparently CSS based Pop-ups are called 'Modals' -->
+<div id="passwordpopup" class="modal">
+
+    <!-- Modal content -->
+    <div id="popup-content" class="popup-content">
+      <span class="close">&times;</span>
+      <p>Delete [selectedCamera]?</p>
+
+      <form action="" method="post">
+        <input type="password" placeholder="Camera's Password" name="campass" value="{{
+          request.form.campass }}">
+
+         <input type="password" placeholder="User's Password" name="userpass" value="{{
+          request.form.userpass }}">
+        <input class="btn btn-default" type="submit" value="Delete!">
+      </form>
+      
+    </div>
+  
+
+    
+</div>
+    
+{% endblock %}
