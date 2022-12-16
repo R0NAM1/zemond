@@ -24,12 +24,14 @@
       <span class="close">&times;</span>
       <p>Delete [selectedCamera]?</p>
 
-      <form action="" method="post">
+      <form action="" method="post" id="form">
         <input type="password" placeholder="Camera's Password" name="campass" value="{{
           request.form.campass }}">
 
-         <input type="password" placeholder="User's Password" name="userpass" value="{{
+        <input type="password" placeholder="User's Password" name="userpass" value="{{
           request.form.userpass }}">
+
+        <input type="hidden" name="camname" value="[selectedCamera]">
         <input class="btn btn-default" type="submit" value="Delete!">
       </form>
       

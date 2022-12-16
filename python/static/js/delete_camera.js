@@ -1,6 +1,10 @@
 function deleteCameraConfirm(cameraName) {
   var modal = document.getElementById("passwordpopup");
+  // For User Reading
   document.getElementById('popup-content').innerHTML = document.getElementById('popup-content').innerHTML.replace('[selectedCamera]', cameraName);
+  // For Form Submission
+  document.getElementById('form').innerHTML = document.getElementById('form').innerHTML.replace('[selectedCamera]', cameraName);
+  
   modal.style.display = "block";
   globalVars.currentCam = cameraName;
 }
@@ -25,7 +29,10 @@ window.onload = function () {
   window.onclick = function(event) {
     if (event.target == modal) {
       modal.style.display = "none";
+        // For User Reading
       document.getElementById('popup-content').innerHTML = document.getElementById('popup-content').innerHTML.replace(globalVars.currentCam, '[selectedCamera]');
+      // For Form Submission
+      document.getElementById('form').innerHTML = document.getElementById('form').innerHTML.replace(globalVars.currentCam, '[selectedCamera]');
     }
   } 
 
