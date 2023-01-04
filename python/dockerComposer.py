@@ -141,3 +141,15 @@ def dockerWatcher():
 
         # Wait 5 seconds to re-check if containers exist
         time.sleep(5)
+
+
+
+def removeContainerCompletely(cameraName):
+    print("Prompted to remove container: " + cameraName)
+    
+    # First stop the container, then remove it.
+    cameraNameHash = cameraName.replace(" ", "-")
+    localContainer = dockerClient.containers.get(cameraNameHash)
+    localContainer.stop()
+    time.sleep(5)
+    localContainer.remove()

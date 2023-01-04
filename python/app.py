@@ -8,7 +8,7 @@ from waitress import serve # Production server
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64
 
 # WebRTC
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCDataChannel
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from aiortc.rtcrtpsender import RTCRtpSender
 
@@ -16,7 +16,8 @@ from aiortc.rtcrtpsender import RTCRtpSender
 from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
-from dockerComposer import addRunningContainer
+from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely
+from ptzHandler import readPTZCoords
 
 app = Flask(__name__)
 
@@ -141,7 +142,8 @@ def cameraList():
 
 
     # dataToSend = (("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"), ("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"))
-
+    if dataToSend == None:
+        dataToSend = (("", "No Camera's Added!", "", "", "", ""), )
     return render_template('cameralist.html', data=dataToSend)
 
 @app.route('/settings/')
@@ -319,7 +321,7 @@ def viewCamera(cam):
     camtuple = myCursor.fetchall()
     camdata = camtuple[0]
     # Currently passing through the raw DB query.
-
+    cameraModel = camdata[7]
    
 
     # Below is WEBRTC Code, it is partially complex, but not really.
@@ -337,6 +339,7 @@ def viewCamera(cam):
     # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
     # 
     # Onvif Events: Time | Topic | Data
+
 
     # Get Onvif Events:
 
@@ -382,14 +385,26 @@ def webRtcWatchdog(uuid, rtcloop):
             break
     print("Broken Watchdog, thread should be terminating now!")
 
-async def webRtcStart(uuid, dockerIP):
+async def updatePTZReadOut(channelObject, cameraName):
+    # Get Camera Info
+    # Getting Current COORDS from camera
+    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+    camtuple = myCursor.fetchall()
+    camdata = camtuple[0]
 
+    while True:
+        ptzcoords = readPTZCoords(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey))
+        print("Updating Coords to {0}".format(ptzcoords))
+        # Publish Here
+        await channelObject.send("TTTT")
+
+        time.sleep(0.5)
+
+async def webRtcStart(uuid, dockerIP, cameraName):
 
     global pingTime
 
     thisUUID = uuid
-
-    # pingTime = {thisUUID: ""}
 
     pingTime[thisUUID] = ""
     
@@ -406,12 +421,26 @@ async def webRtcStart(uuid, dockerIP):
     iceServers=[RTCIceServer(
         urls=['stun:nvr.internal.my.domain'])]))
 
-    
+    # We need to see if the camera supports PTZ, if it does prepare to send COORDS
+    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+    camtuple = myCursor.fetchall()
+    camdata = camtuple[0]
+    # Currently passing through the raw DB query.
+    cameraModel = camdata[7]
+    ptzcoords = {}
+    myCursor.execute("Select hasptz from cameradb where model = '{0}' ".format(cameraModel))
+    hasPTZTuple = myCursor.fetchone()
+
+    hasPTZ = hasPTZTuple[0]
 
     # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
 
     @webRtcPeer.on("datachannel")
     def on_datachannel(channel):
+        if (hasPTZ == True):
+            ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
+            ptzUpdateThread = Thread(target=updatePTZReadOut, args=(channel, cameraName, ))
+            ptzUpdateThread.start()
         @channel.on("message")
         def on_message(message):
             global pingTime
@@ -466,7 +495,7 @@ def webRTCOFFER(cam):
     asyncio.set_event_loop(rtcloop)
         
     # Run an event into that loop until it's complete and returns a value
-    t = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString))
+    t = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString, cam))
     
 
     # Now create a timer that is reset by Ping-Pong.
@@ -486,7 +515,51 @@ def webRTCOFFER(cam):
 
 # WEBRTC END ===================================
 
+@app.route('/settings/delete_camera/', methods=['GET', 'POST'])
+@login_required
+def deleteCamera():
+    if request.method == 'POST':
+        campass = request.form['campass']
+        userpass = request.form['userpass']
+        cameraName = request.form['camname']
+        # This post request will only run if both of these values not only
+        # First check Camera Password Against Server, pull from DB
+        # Then get current user ID, and password hash, then compare!
+
+        # Get Campass From DB
+        myCursor.execute("Select password from localcameras where name='{0}'".format(cameraName))
+        currentpassword = myCursor.fetchone()
+        currentpasswordString = ''.join(currentpassword)
+        # Originally wanted to hash submitted password and check if it matches with what's in DB,
+        # but cryptocode generates a different Hash :,
+        # Now I just decrypt the DB entry and compare.
+        decryptedDBPASS =  cryptocode.decrypt(str(currentpasswordString), passwordRandomKey)
+
+
+        if campass == decryptedDBPASS:
+            # Now check if the user password matches
+            # Note: Temporaraly just checking if password is 'admin', test credentials.
+            if userpass == 'admin':
+                # Now delete the DB entry of the cameraName
+                myCursor.execute("DELETE FROM localcameras where name='{0}'".format(cameraName))
+                myDatabase.commit()
+                # Now that the DB entry is gone, remove the Docker Container!
+                removeContainerCompletely(cameraName)
+
+
+    # We will give a text based list of the camera names, when a camera is clicked on, you will need your Users password for zemond
+    # and the camera's password on file.
+
+    # Get all camera's
+    myCursor.execute("Select name from localcameras")
+    camnames = myCursor.fetchall()
+
+    return render_template('delete_camera.html', data=camnames)  
+
+
 def updateSnapshots():
+
+    time.sleep(5)
 
     while True:
         # This runs infinitly in another thread at program start,
@@ -497,7 +570,6 @@ def updateSnapshots():
         localcameras = myCursor.fetchall()
 
         global snapshotCache
-
         # Reset Temp Cache
 
         tempCacne = {}
@@ -514,19 +586,23 @@ def updateSnapshots():
 
             # Assemble Credential Based RTSP URL
             rtspCredString = 'rtsp://' + row[10] + ':8554/cam1'
-
             os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
             cap = cv2.VideoCapture(rtspCredString)
             
 
             if not cap.isOpened():
                 print('Cannot open RTSP stream')
+                # Assuming that docker container isn't started, just break the loop then try again.
+                break
             else:
                 readquestion, frame = cap.read()
                 # print("Got Snapshot for " + currentiname)
                 cap.release()
 
-            _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
+            try:
+                _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
+            except:
+                break
             im_bytes = im_arr.tobytes()
             im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
 
@@ -541,6 +617,11 @@ if __name__ == '__main__':
     # Start Snapshot Thread.
     snapshotThread = Thread(target=updateSnapshots)
     snapshotThread.start()
+
+    # Start Docker Management Thread, which checks the localcameras table and using that determines if all docker containers are runnning.
+    dockerThread = Thread(target=dockerWatcher)
+    dockerThread.start()
+
     # Testing Web Server
     # app.run(host='0.0.0.0')
 
