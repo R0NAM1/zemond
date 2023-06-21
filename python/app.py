@@ -71,7 +71,7 @@ def logout():
 @app.route('/dashboard/')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    return render_template('dashboard.html', camerasonline=onlineCameraCache)
 
 
 @app.route('/cameralist/')
@@ -385,20 +385,34 @@ def webRtcWatchdog(uuid, rtcloop):
             break
     print("Broken Watchdog, thread should be terminating now!")
 
-async def updatePTZReadOut(channelObject, cameraName):
+async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
     # Get Camera Info
+
+    # THE CURRENT ISSUE I am having is with the event loops, because this get's called to run in another thread, but it still needs
+    # to be awaitable, 
+    # Current Warning Is: /usr/lib/python3.10/threading.py:953: RuntimeWarning: coroutine 'updatePTZReadOut' was never awaited
+    # Ref Article: https://xinhuang.github.io/posts/2017-07-31-common-mistakes-using-python3-asyncio.html
+    # https://lucumr.pocoo.org/2016/10/30/i-dont-understand-asyncio/
+
+    # This was FIXED thanks to GPT-4, but through a special frontend phind.com, (https://www.phind.com/search?cache=fc03e656-53f9-4b1e-bfe4-8c4632d7fe5c)
+
+    
     # Getting Current COORDS from camera
     myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
     camtuple = myCursor.fetchall()
     camdata = camtuple[0]
+    
+    # While Object exists, send Coords
+    # Since messages are random, we send a identifier + data sepeerated by |, so 'ptzcoordupdate | X Y'
 
     while True:
         ptzcoords = readPTZCoords(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey))
         print("Updating Coords to {0}".format(ptzcoords))
+        
         # Publish Here
-        await channelObject.send("TTTT")
+        channel_object.send('ptzcoordupdate | ' +str(ptzcoords))
 
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
 async def webRtcStart(uuid, dockerIP, cameraName):
 
@@ -439,8 +453,9 @@ async def webRtcStart(uuid, dockerIP, cameraName):
     def on_datachannel(channel):
         if (hasPTZ == True):
             ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
-            ptzUpdateThread = Thread(target=updatePTZReadOut, args=(channel, cameraName, ))
-            ptzUpdateThread.start()
+
+            update_task = asyncio.ensure_future(updatePTZReadOut(webRtcPeer, cameraName, channel))  
+
         @channel.on("message")
         def on_message(message):
             global pingTime
@@ -570,9 +585,11 @@ def updateSnapshots():
         localcameras = myCursor.fetchall()
 
         global snapshotCache
+        global onlineCameraCache
         # Reset Temp Cache
 
         tempCacne = {}
+        tmpCameraCache = 0
 
         for row in localcameras:
             # Get Current Name
@@ -597,6 +614,8 @@ def updateSnapshots():
             else:
                 readquestion, frame = cap.read()
                 # print("Got Snapshot for " + currentiname)
+                # This means the camera is online, to put it simply. Add this to a counter.
+                tmpCameraCache = tmpCameraCache + 1
                 cap.release()
 
             try:
@@ -610,6 +629,7 @@ def updateSnapshots():
             tempCacne[currentiname]=im_b64
 
         snapshotCache = tempCacne; # When temp Cache is finished filling, finalize it.
+        onlineCameraCache = tmpCameraCache;
         print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
         time.sleep(15) # Time to wait between gathering snapshots
 
