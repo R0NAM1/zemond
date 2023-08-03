@@ -12,11 +12,11 @@ def sendONVIFRequest(payload, onvifURL, username, password):
 passwordRandomKey = 'ChangeMeTooooooo!'
 
 
-databaseURL = '10.0.0.15'
+databaseURL = '10.36.0.243'
 databasePort = 5432
 databaseUser = 'zemond'
 databaseName = 'zemond'
-databaseUserPassword = 'uniquePassword'
+databaseUserPassword = '1987glados'
 
 myDatabase = psycopg2.connect(database=databaseName,
                         host=databaseURL,
