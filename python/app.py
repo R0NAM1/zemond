@@ -403,14 +403,14 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
     camdata = camtuple[0]
     
     # While Object exists, send Coords
-    # Since messages are random, we send a identifier + data sepeerated by |, so 'ptzcoordupdate | X Y'
-
+    # Since messages are random, we send a identifier + data sepeerated by |, so 'ptzcoordupdate|X Y'
+    
     while True:
         ptzcoords = readPTZCoords(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey))
         print("Updating Coords to {0}".format(ptzcoords))
         
         # Publish Here
-        channel_object.send('ptzcoordupdate | ' +str(ptzcoords))
+        channel_object.send('ptzcoordupdate|' +str(ptzcoords))
 
         await asyncio.sleep(0.5)
 

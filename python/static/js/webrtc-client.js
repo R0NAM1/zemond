@@ -87,15 +87,46 @@ export function start() {
     dc.onopen = function() {
         dcInterval = setInterval(function() {
             var message = 'ping';
-            console.log("Ping!");
+            // console.log("Ping!");
             dc.send(message);
         }, 1000);
     };
     dc.onmessage = function(evt) {
 
-        if (evt.data.substring(0, 4) === 'pong') {
-            console.log("Pong!");
-        }
+    // console.log(evt.data);
+
+    let lcData = (evt.data).toString();
+
+    // When we receive data, process it here. Mainly just updating variables.
+
+        // Second check if message is a valid data type, valid types are defined below in webrtc_var_data_types
+
+        const webrtc_var_data_types = ["ptzcoordupdate|"];
+
+        // Depending on type, update variable
+
+            // So, in the context of your code, (type => lcData.includes(type)) is a function that checks if lcData includes the current element in the webrtc_var_data_types array. If it does, the function returns true, and findIndex() returns the index of that element javascript.info.
+            // https://www.phind.com/agent?cache=clkvplmrt0007mm085y9pwizb
+        
+        let webrtc_var_data_types_index_return = webrtc_var_data_types.findIndex(type => lcData.includes(type));
+        // -1 if not valid message.
+
+        let message_type = (webrtc_var_data_types.toString(webrtc_var_data_types_index_return));
+
+        // Now message type is valid, extract data
+
+        if (webrtc_var_data_types_index_return >= 0) {
+            let webrtc_data = lcData.split("|")
+            // console.log(webrtc_data[1])
+        
+            switch(message_type) {
+
+                case 'ptzcoordupdate|':
+
+                    document.getElementById('xyzcoord').innerHTML = "XYZ Coords: " + webrtc_data[1]
+            }}
+
+
     };
 
     pc.addTransceiver('video', {direction: 'recvonly'}); // We only receive video
