@@ -5,7 +5,8 @@ var pc = null;
 // PC Will Be The Server
 let stream = new MediaStream();
 // Stream is whatever we get from the server
-var dc = null, dcInterval = null;
+var dc = null, dcInterval = null, globalDcObject = null;
+
 // Data Channel
 
 
@@ -80,6 +81,7 @@ export function start() {
     // Add Data Channels For PingPong
 
     dc = pc.createDataChannel('chat') 
+    globalDcObject = dc;
     dc.onclose = function() {
         clearInterval(dcInterval);
         dataChannelLog.textContent += '- close\n';
@@ -135,6 +137,28 @@ export function start() {
     negotiate(); // Negotiate clients and connect peers
 
     
+}
+
+export function sendPtzMessage(direction) {
+
+    if (direction == 'Up') {
+        globalDcObject.send("up")
+    }
+    else if (direction == 'Down') {
+        globalDcObject.send("down")
+    }
+    else if (direction == 'Left') {
+        globalDcObject.send("left")
+    }
+    else if (direction == 'Right') {
+        globalDcObject.send("right")
+    }
+    else if (direction == 'Positive') {
+        globalDcObject.send("positive")
+    }
+    else if (direction == 'Negative') {
+        globalDcObject.send("negative")
+    }
 }
 
 export function stop() { // Close Peer, if wanted.

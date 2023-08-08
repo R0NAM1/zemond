@@ -86,24 +86,43 @@ height: 100vh;
     top: 0;
     left: 75px;
  }
+
+ .button.up:hover {
+     cursor: n-resize;
+ }
  
  .button.down {
     bottom: 0;
     left: 75px;
  }
  
+
+ .button.down:hover {
+    cursor: s-resize;
+}
+
  .button.left {
     left: 0;
     top: 75px;
     transform: translateX(25px);
  }
  
+
+ .button.left:hover {
+    cursor: w-resize;
+}
+
  .button.right {
     right: 0;
     top: 75px;
     transform: translateX(-25px);
 
  }
+
+
+ .button.right:hover {
+    cursor: e-resize;
+}
  
  .button.centerpositive, .button.centernegative {
     left: 75px;
@@ -113,7 +132,15 @@ height: 100vh;
  .button.centerpositive {
     transform: translateY(-25px);
  }
+
+ .button.centerpositive:hover {
+    cursor: zoom-in;
+}
  
  .button.centernegative {
     transform: translateY(25px);
  }
+
+ .button.centernegative:hover {
+    cursor: zoom-out;
+}

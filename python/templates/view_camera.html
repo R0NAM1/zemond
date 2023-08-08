@@ -5,11 +5,6 @@
 
     <div> <b>{{ data[0] }}</b>                   <b>{{ data[6] }} {{ data[7] }}</b> </div>
 
-
-
-    <script type="module" src="{{url_for('static', filename='node_modules/webrtc-adapter/out/adapter.js')}}"></script>
-
-
     <div id="media">
         <audio id="audio" autoplay="true"></audio>
         <video controls="true" muted id="video" autoplay="true" playsinline="true" width="750"></video>
@@ -19,9 +14,15 @@
 
     <script type="text/javascript">
         var cameraName = '{{ data[0] }}'
+    </script>
+
+    <script type="module">
+        import {sendPtzMessage} from "{{url_for('static', filename='js/webrtc-client.js')}}";
+        window.sendPtzMessage = sendPtzMessage;
      </script>
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
+
 
     <link rel="stylesheet" href="{{url_for('static', filename='css/view_camera.css')}}">
 
@@ -48,16 +49,15 @@
     </table>
 
     <div id="right-dash">
-
         <div id="xyzcoord">
             <b id="xyzcoordtext">XYZ Coords: (Static)</b>
             <div class="joystick">
-                <div class="button up">↑</div>
-                <div class="button down">↓</div>
-                <div class="button left">←</div>
-                <div class="button right">→</div>
-                <div class="button centerpositive">+</div>
-                <div class="button centernegative">-</div>
+                <div onclick="window.sendPtzMessage('Up')" class="button up">↑</div>
+                <div onclick="window.sendPtzMessage('Down')" class="button down">↓</div>
+                <div onclick="window.sendPtzMessage('Left')" class="button left">←</div>
+                <div onclick="window.sendPtzMessage('Right')" class="button right">→</div>
+                <div onclick="window.sendPtzMessage('Positive')" class="button centerpositive">+</div>
+                <div onclick="window.sendPtzMessage('Negative')" class="button centernegative">-</div>
              </div>
         </div>
 
