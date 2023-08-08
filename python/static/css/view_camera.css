@@ -16,3 +16,104 @@ thead {
 table {
     width: 800px;
 }
+
+body {
+position: relative;
+margin: 0;
+height: 100vh;
+}
+
+#main-content {
+    width: 100%; /* Expanded to the full width */
+    height: 100%; /* Adjust this if necessary */
+}
+
+#right-dash {
+    position: absolute; /* we use absolute position for the #right-dash */
+    right: 0; /* stick it to the right side */
+    top: 87.7167px; /* The height of your navbar to avoid overlap, adjust as necessary */
+    display: flex; /* here we use flex to vertically align its items */
+    flex-direction: column; /* Sets the direction of flex items in a flex container */
+    justify-content: flex-start; /* center items horizontally */
+    align-items: center; /* center items vertically */
+    width: 33.33%; 
+    height: calc(100% - 60px); /* 100% of body's height minus navbar's height */
+    background: #f3f3f3;
+    border: 1px solid black; 	/* Adding a border to distinguish the element */
+    padding: 10px;     /* Adding some padding for text */
+}
+
+#event-table {
+    height: 30px
+}
+
+#xyzcoord {
+    border: 1px solid black; 	/* Adding a border to distinguish the element */
+    padding: 10px;     /* Adding some padding for text */
+}
+
+.joystick {
+    position: relative; 
+    width: 200px;
+    height: 200px;
+    margin:auto;
+    cursor: default;
+ }
+ 
+ .button {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background-color: lightgrey;
+    border-radius: 20%;
+    display: flex;
+    align-items: center; 
+    justify-content: center;
+    font-family: Arial, sans-serif;  
+    transition: 0.3s all;
+ }
+ 
+ .button:hover {
+   box-shadow: 0px 0px 15px rgba(0,0,0,0.2);
+   background-color: #aaa;
+ }
+ 
+ .button:active {
+   box-shadow: inset 0px 0px 15px rgba(0,0,0,0.2);
+ }
+ 
+ .button.up {
+    top: 0;
+    left: 75px;
+ }
+ 
+ .button.down {
+    bottom: 0;
+    left: 75px;
+ }
+ 
+ .button.left {
+    left: 0;
+    top: 75px;
+    transform: translateX(25px);
+ }
+ 
+ .button.right {
+    right: 0;
+    top: 75px;
+    transform: translateX(-25px);
+
+ }
+ 
+ .button.centerpositive, .button.centernegative {
+    left: 75px;
+    top: 75px;
+ }
+ 
+ .button.centerpositive {
+    transform: translateY(-25px);
+ }
+ 
+ .button.centernegative {
+    transform: translateY(25px);
+ }

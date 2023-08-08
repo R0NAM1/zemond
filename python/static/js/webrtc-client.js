@@ -123,7 +123,7 @@ export function start() {
 
                 case 'ptzcoordupdate|':
 
-                    document.getElementById('xyzcoord').innerHTML = "XYZ Coords: " + webrtc_data[1]
+                    document.getElementById('xyzcoordtext').innerHTML = "XYZ Coords: " + webrtc_data[1]
             }}
 
 

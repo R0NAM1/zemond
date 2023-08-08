@@ -27,7 +27,7 @@
 
     <!--<div> {{ data }} </div>-->
 
-    <table border="1px solid black;"
+    <table id="event-table" border="1px solid black;"
         margin-left="auto;">
         <thead>
             <tr>
@@ -47,6 +47,20 @@
         </tbody>
     </table>
 
-    <b id="xyzcoord" >XYZ Coords: (Static)</b>
+    <div id="right-dash">
 
+        <div id="xyzcoord">
+            <b id="xyzcoordtext">XYZ Coords: (Static)</b>
+            <div class="joystick">
+                <div class="button up">↑</div>
+                <div class="button down">↓</div>
+                <div class="button left">←</div>
+                <div class="button right">→</div>
+                <div class="button centerpositive">+</div>
+                <div class="button centernegative">-</div>
+             </div>
+        </div>
+
+    </div>
+    
 {% endblock %}
