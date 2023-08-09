@@ -1,0 +1,30 @@
+(Or Using ONVIF on an IP camera, the way that you should ~ R0NAM1)
+
+Install SoapUI, easy to learn the complicated way ONVIF works and how simple it actually is, I haven't found a single tutorial
+like the one I'm currently writing.
+
+1. In SoapUI, make a new Soap Project with an initial WSDL of:
+http://www.onvif.org/ver10/device/wsdl/devicemgmt.wsdl
+
+[ Now what does all that really mean? SOAP (Simple Object Access Protocol) Is A Sub-Protocol / Encoding Meathod (Since in HTTP headers it
+sets encoding to soap+xml, oh yeah, it also uses HTTP as a transport protocal, so SOAP would be the running protocol with XML encoding.
+
+A WSDL is a 'Definitions' file, another 'protocol' of sorts. The protocol is defined on the ONVIF website by renamed XML files, WSDL's.]
+
+2. Find the Request 'GetCapabilities', expand it and double-click on 'Request 1'.
+
+XML is sent as data attatched to the HTTP request, so that's the main window. (Replace the ? With 'Device')
+With SOAP you authenticate without headers, click on the auth section on the bottom and enter basic credentials.
+Toggle Pre-emptive auth as needed, if it returns invalid or not.
+
+3. The Endpoint URI is special, by ONVIF Standard it is as follows, http(s)://ip.address/onvif/device_service
+
+With all that set...
+
+4. Press Run!
+
+You'll now get a soap+xml response, see?
+
+In this the Content Type Is soap+xml, so that makes more sense, plus some more URL's of WSDL files.
+This is how we get the Camera's Capabilities, so we can load all those files and the camera should support most if not all of them!
+That, is what ONVIF really is. SOAP.
