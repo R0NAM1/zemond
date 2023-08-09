@@ -47,3 +47,33 @@ restartCamera = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-env
       <wsdl:SystemReboot/>
    </soap:Body>
 </soap:Envelope>"""
+
+absolutePtzMove = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver20/ptz/wsdl" xmlns:sch="http://www.onvif.org/ver10/schema">
+   <soap:Header/>
+   <soap:Body>
+      <wsdl:AbsoluteMove>
+         <wsdl:ProfileToken>MediaProfile00000</wsdl:ProfileToken>
+         <wsdl:Position>
+            <sch:PanTilt x="{RP1}" y="{RP2}"/>
+            <sch:Zoom x="{RP3}}"/>
+         </wsdl:Position>
+         <wsdl:Speed>
+            <sch:PanTilt x="{RP4}" y="{RP5}"/>
+            <sch:Zoom x="{RP6}"/>
+         </wsdl:Speed>
+      </wsdl:AbsoluteMove>
+   </soap:Body>
+</soap:Envelope>"""
+
+continiousPtzMove = """<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:wsdl="http://www.onvif.org/ver20/ptz/wsdl" xmlns:sch="http://www.onvif.org/ver10/schema">
+   <soap:Header/>
+   <soap:Body>
+      <wsdl:ContinuousMove>
+         <wsdl:ProfileToken>MediaProfile00000</wsdl:ProfileToken>
+         <wsdl:Velocity>
+            <sch:PanTilt x="{RP1}" y="{RP2}"/>
+            <sch:Zoom x="{RP3}"/>
+         </wsdl:Velocity>
+      </wsdl:ContinuousMove>
+   </soap:Body>
+</soap:Envelope>"""

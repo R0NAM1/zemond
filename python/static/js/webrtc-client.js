@@ -141,23 +141,26 @@ export function start() {
 
 export function sendPtzMessage(direction) {
 
-    if (direction == 'Up') {
+    if (direction == 'up') {
         globalDcObject.send("up")
     }
-    else if (direction == 'Down') {
+    else if (direction == 'down') {
         globalDcObject.send("down")
     }
-    else if (direction == 'Left') {
+    else if (direction == 'left') {
         globalDcObject.send("left")
     }
-    else if (direction == 'Right') {
+    else if (direction == 'right') {
         globalDcObject.send("right")
     }
-    else if (direction == 'Positive') {
+    else if (direction == 'positive') {
         globalDcObject.send("positive")
     }
-    else if (direction == 'Negative') {
+    else if (direction == 'negative') {
         globalDcObject.send("negative")
+    }
+    else if (direction == 'stop') {
+        globalDcObject.send("stop")
     }
 }
 

@@ -17,7 +17,7 @@ from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
 from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely
-from ptzHandler import readPTZCoords
+from ptzHandler import readPTZCoords, sendContMovCommand
 
 app = Flask(__name__)
 
@@ -407,12 +407,40 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
     
     while True:
         ptzcoords = readPTZCoords(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey))
-        print("Updating Coords to {0}".format(ptzcoords))
+        # print("Updating Coords to {0}".format(ptzcoords))
         
         # Publish Here
         channel_object.send('ptzcoordupdate|' +str(ptzcoords))
 
         await asyncio.sleep(0.5)
+
+def sendAuthenticatedPTZContMov(cameraName, direction):
+    # Get camera credentials
+    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+    camtuple = myCursor.fetchall()
+    camdata = camtuple[0]
+    finalXVelocity = 0
+    finalYVelocity = 0
+    zoom = 0
+
+    if (direction == "up"):
+        finalYVelocity = 0.2
+    elif (direction == "down"):
+        finalYVelocity = -0.2
+    elif (direction == "left"):
+        finalXVelocity = -0.2
+    elif (direction == "right"):
+        finalXVelocity = 0.2
+    elif (direction == "positive"):
+        zoom = 0.2
+    elif (direction == "negative"):
+        zoom = -0.2
+    elif (direction == "stop"):
+        finalXVelocity = 0
+        finalYVelocity = 0
+        zoom = 0
+    
+    sendContMovCommand(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), finalXVelocity, finalYVelocity, zoom)
 
 async def webRtcStart(uuid, dockerIP, cameraName):
 
@@ -453,7 +481,6 @@ async def webRtcStart(uuid, dockerIP, cameraName):
     def on_datachannel(channel):
         if (hasPTZ == True):
             ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
-
             update_task = asyncio.ensure_future(updatePTZReadOut(webRtcPeer, cameraName, channel))  
 
         @channel.on("message")
@@ -462,9 +489,24 @@ async def webRtcStart(uuid, dockerIP, cameraName):
             if isinstance(message, str) and message.startswith("ping"):
                 pingTime[thisUUID] = time.time()
                 channel.send("pong" + message[4:])
+            elif (message == "up"):
+                sendAuthenticatedPTZContMov(cameraName, "up")
+            elif (message == "down"):
+                sendAuthenticatedPTZContMov(cameraName, "down")
+            elif (message == "left"):
+                sendAuthenticatedPTZContMov(cameraName, "left")
+            elif (message == "right"):
+                sendAuthenticatedPTZContMov(cameraName, "right")
+            elif (message == "positive"):
+                sendAuthenticatedPTZContMov(cameraName, "positive")
+            elif (message == "negative"):
+                sendAuthenticatedPTZContMov(cameraName, "negative")
+            elif (message == "stop"):
+                sendAuthenticatedPTZContMov(cameraName, "stop")
             elif ():
                 print("Closing Peer!")
                 webRtcPeer.close()
+            
 
     if (player.video):
         webRtcPeer.addTrack(player.video)
