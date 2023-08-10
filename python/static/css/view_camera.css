@@ -50,7 +50,8 @@ height: 100vh;
 #xyzcoord {
     border: 1px solid black; 	/* Adding a border to distinguish the element */
     padding: 10px;     /* Adding some padding for text */
-    
+    opacity: 0.6;/* By default non-interactable, is removed when PTZ COORD is updated  */
+    pointer-events: none;
 }
 
 .joystick {

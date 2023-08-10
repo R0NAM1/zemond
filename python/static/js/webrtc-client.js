@@ -126,6 +126,8 @@ export function start() {
                 case 'ptzcoordupdate|':
 
                     document.getElementById('xyzcoordtext').innerHTML = "XYZ Coords: " + webrtc_data[1]
+                    document.getElementById('xyzcoord').style.opacity = "1.0"
+                    document.getElementById('xyzcoord').style.pointerEvents = "all"
             }}
 
 
