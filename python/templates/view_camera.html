@@ -52,15 +52,40 @@
         <div id="xyzcoord">
             <b id="xyzcoordtext">XYZ Coords: (Static)</b>
             <div class="joystick">
-                <div onmousedown="window.sendPtzMessage('up')" onmouseup="window.sendPtzMessage('stop')" class="button up">↑</div>
-                <div onmousedown="window.sendPtzMessage('down')" onmouseup="window.sendPtzMessage('stop')" class="button down">↓</div>
-                <div onmousedown="window.sendPtzMessage('left')" onmouseup="window.sendPtzMessage('stop')" class="button left">←</div>
-                <div onmousedown="window.sendPtzMessage('right')" onmouseup="window.sendPtzMessage('stop')" class="button right">→</div>
-                <div onmousedown="window.sendPtzMessage('positive')" onmouseup="window.sendPtzMessage('stop')" class="button centerpositive">+</div>
-                <div onmousedown="window.sendPtzMessage('negative')" onmouseup="window.sendPtzMessage('stop')" class="button centernegative">-</div>
-             </div>
+                <div onmousedown="window.sendPtzMessage('up', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button up">↑</div>
+                <div onmousedown="window.sendPtzMessage('down', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button down">↓</div>
+                <div onmousedown="window.sendPtzMessage('left', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button left">←</div>
+                <div onmousedown="window.sendPtzMessage('right', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button right">→</div>
+                <div onmousedown="window.sendPtzMessage('positive', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centerpositive">+</div>
+                <div onmousedown="window.sendPtzMessage('negative', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centernegative">-</div>
+                
+                <div class="slider-box">
+                    <b>Speed</b>
+                    <input class="sliders" id="slider" list="slidermarkers" type="range" min="1" max="10" value="5">
+            
+                    <datalist id="slidermarkers">
+                        <option label="1" value="1"></option>
+                        <option label="2" value="2"></option>
+                        <option label="3" value="3"></option>
+                        <option label="4" value="4"></option>
+                        <option label="5" value="5"></option>
+                        <option label="6" value="6"></option>
+                        <option label="7" value="7"></option>
+                        <option label="8" value="8"></option>
+                        <option label="9" value="9"></option>
+                        <option label="10" value="10"></option>
+                        </datalist>
+                </div>
+            </div>
+            <div class="space">
+                
+            </div>
         </div>
 
     </div>
     
+    <script type="text/javascript">
+        var speedSlider = document.getElementById("slider");
+    </script>
+
 {% endblock %}

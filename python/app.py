@@ -414,7 +414,7 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
 
         await asyncio.sleep(0.5)
 
-def sendAuthenticatedPTZContMov(cameraName, direction):
+def sendAuthenticatedPTZContMov(cameraName, direction, speed):
     # Get camera credentials
     myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
     camtuple = myCursor.fetchall()
@@ -422,15 +422,16 @@ def sendAuthenticatedPTZContMov(cameraName, direction):
     finalXVelocity = 0
     finalYVelocity = 0
     zoom = 0
+    speed = (float(speed) * 0.10)
 
     if (direction == "up"):
-        finalYVelocity = 0.2
+        finalYVelocity = (speed)
     elif (direction == "down"):
-        finalYVelocity = -0.2
+        finalYVelocity = -(speed)
     elif (direction == "left"):
-        finalXVelocity = -0.2
+        finalXVelocity = -(speed)
     elif (direction == "right"):
-        finalXVelocity = 0.2
+        finalXVelocity = (speed)
     elif (direction == "positive"):
         zoom = 0.2
     elif (direction == "negative"):
@@ -489,20 +490,32 @@ async def webRtcStart(uuid, dockerIP, cameraName):
             if isinstance(message, str) and message.startswith("ping"):
                 pingTime[thisUUID] = time.time()
                 channel.send("pong" + message[4:])
-            elif (message == "up"):
-                sendAuthenticatedPTZContMov(cameraName, "up")
-            elif (message == "down"):
-                sendAuthenticatedPTZContMov(cameraName, "down")
-            elif (message == "left"):
-                sendAuthenticatedPTZContMov(cameraName, "left")
-            elif (message == "right"):
-                sendAuthenticatedPTZContMov(cameraName, "right")
-            elif (message == "positive"):
-                sendAuthenticatedPTZContMov(cameraName, "positive")
-            elif (message == "negative"):
-                sendAuthenticatedPTZContMov(cameraName, "negative")
+            elif (message.startswith("up:")):
+                msgSpeed = message.split(":")[1] 
+                sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed)
+
+            elif (message.startswith("down:")):
+                msgSpeed = message.split(":")[1] 
+                sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed)
+
+            elif message.startswith("left:"):
+                msgSpeed = message.split(":")[1] 
+                sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed)
+
+            elif (message.startswith("right:")):
+                msgSpeed = message.split(":")[1]
+                sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed)
+
+            elif (message.startswith("positive:")):
+                msgSpeed = message.split(":")[1]
+                sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed)
+
+            elif (message.startswith("negative:")):
+                msgSpeed = message.split(":")[1]
+                sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed)
+
             elif (message == "stop"):
-                sendAuthenticatedPTZContMov(cameraName, "stop")
+                sendAuthenticatedPTZContMov(cameraName, "stop", 0)
             elif ():
                 print("Closing Peer!")
                 webRtcPeer.close()

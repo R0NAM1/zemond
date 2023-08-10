@@ -139,25 +139,25 @@ export function start() {
     
 }
 
-export function sendPtzMessage(direction) {
+export function sendPtzMessage(direction,speed) {
 
     if (direction == 'up') {
-        globalDcObject.send("up")
+        globalDcObject.send("up:"+speed)
     }
     else if (direction == 'down') {
-        globalDcObject.send("down")
+        globalDcObject.send("down:"+speed)
     }
     else if (direction == 'left') {
-        globalDcObject.send("left")
+        globalDcObject.send("left:"+speed)
     }
     else if (direction == 'right') {
-        globalDcObject.send("right")
+        globalDcObject.send("right:"+speed)
     }
     else if (direction == 'positive') {
-        globalDcObject.send("positive")
+        globalDcObject.send("positive:"+speed)
     }
     else if (direction == 'negative') {
-        globalDcObject.send("negative")
+        globalDcObject.send("negative:"+speed)
     }
     else if (direction == 'stop') {
         globalDcObject.send("stop")
