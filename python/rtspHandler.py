@@ -1,18 +1,17 @@
-import socket, sys, cryptocode, hashlib, re, asyncio, time, websockets
+import socket, sys, cryptocode, hashlib, re, threading, time, websockets, subprocess
 from pyrtp import *
-from digestPacket import *
 from SimpleWebSocketServer import WebSocket
-# This file is a mini-handler for RTSP, this is meant to be some universal functions that can be used in any program, 
-# ===R0NAM1 2022===
+# Before I got AioRTC working, this was how I thought about handling RTP and RTSP, but it seems to be more useful with backchannel applications, so that is what it shall be used for. (At least in reference)
+# # ===R0NAM1 2022===
 # This is a step based program, so we call the following to handle RTSP and get RTP
-# I take the following variables:
-# The IP (x.x.x.x), the ADDRESS (rtsp://x.x.x.x:xxxx)
+# Note: This is made using a Amcrest PTZ camera, so it is highly specific, but that's for showing it works. Zemond
+# integration will be much more programmable.
 
 global rtpAudioSocket
 global rtpVideoSocket
 global sessionPacketNum
 authenticationType = ""
-# Could Be None, Basic, Digest
+# Could Be None, Basic, Digest, Usually Digest
 
 def createDigestAuthString(username, password, realm, nonce, uri, method):
     # As such: Authorization: Digest username="admin", realm="Login to Amcrest",
@@ -66,7 +65,8 @@ def generateRTSPPacket(option, uri, userAgent, sessionNum, genAuthString=False, 
         Accept: application/sdp\r
         CSeq: {1}\r
         User-Agent: {2}\r
-        {3}\r\n\r\n''').format(uri, sessionNum, userAgent, authenticationString)
+        {3}\r
+        Require: www.onvif.org/ver20/backchannel\r\n\r\n''').format(uri, sessionNum, userAgent, authenticationString)
 
         return constructedPacket
     elif (option == "SETUP"):
@@ -98,7 +98,8 @@ def generateRTSPPacket(option, uri, userAgent, sessionNum, genAuthString=False, 
         CSeq: {4}\r
         User-Agent: {5}\r
         Session: {6}\r
-        {7}\r\n\r\n''').format(uri, trackID, clientPorts[0], clientPorts[1], sessionNum, userAgent, sessionid, authenticationString)
+        {7}\r
+        Require: www.onvif.org/ver20/backchannel\r\n\r\n''').format(uri, trackID, clientPorts[0], clientPorts[1], sessionNum, userAgent, sessionid, authenticationString)
 
         return constructedPacket
         
@@ -120,7 +121,8 @@ def generateRTSPPacket(option, uri, userAgent, sessionNum, genAuthString=False, 
         CSeq: {1}
         User-Agent: {2}
         Session: {3}\r
-        {4}\r\n\r\n''').format(uri, sessionNum, userAgent, sessionid, authenticationString)
+        {4}\r
+        Require: www.onvif.org/ver20/backchannel\r\n\r\n''').format(uri, sessionNum, userAgent, sessionid, authenticationString)
 
         return constructedPacket
     elif (option == "SNAPSHOT"):
@@ -135,16 +137,20 @@ def createConnection(ip, port):
     rtspSocket.settimeout(10)
     rtspSocket.connect((ip,port))
 
-def createReceivingConnection():
-        global rtpVideoSocket
-        global rtpAudioSocket
-        rtpVideoSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        rtpVideoSocket.bind(("", 14364)) # we open a port that is visible to the whole internet (the empty string "" takes care of that)
-        rtpVideoSocket.settimeout(5)
-
-        rtpAudioSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        rtpAudioSocket.bind(("", 14366)) # we open a port that is visible to the whole internet (the empty string "" takes care of that)
-        rtpAudioSocket.settimeout(5)
+def createReceivingConnection(portRangeStart, portRangeEnd):
+        global recvSocketStart
+        global recvSocketEnd
+        print("Ports: " + str(portRangeStart) + ", " + str(portRangeEnd))
+    
+        recvSocketStart = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        
+        recvSocketEnd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        
+        server_addressStart = ('0.0.0.0', portRangeStart)
+        server_addressEnd = ('0.0.0.0', portRangeEnd)
+        
+        recvSocketStart.bind(server_addressStart)
+        recvSocketEnd.bind(server_addressEnd)
 
 def closeConnection():
     print("Closing Connection", file=sys.stderr)
@@ -162,7 +168,7 @@ def determineAuthentication(firstResponse):
         if (firstResponse.find("WWW-Authenticate: Digest") != -1):
             authenticationType = "Digest"
         else:
-            authenticationType = "None"
+            authenticationType = "Digest"
     return authenticationType
 
 
@@ -179,11 +185,16 @@ def handleRTSPtoGetRTP(ip, port, address, userAgent, username, password):
     createConnection(ip, port)
     # Generate Packet.
     sessionPacketNum = sessionPacketNum + 1;
-    payload = generateRTSPPacket("OPTIONS", address, userAgent, sessionPacketNum)
+    uri =  "rtsp://" + ip + ":" + str(port)
+    payload = generateRTSPPacket("OPTIONS", userAgent=userAgent, sessionNum=sessionPacketNum, uri=uri)
+    print("Payload: " + payload)
     # Send packet and wait for response, this gives us initial session info.
     lastResponse = sendPacket(payload)
+    print("Last Response: " + lastResponse)
     # Determine authentication based on response.
-    authenticationType = determineAuthentication(lastResponse)
+    # authenticationType = determineAuthentication(lastResponse)
+    authenticationType = "Digest"
+
     print(("I've determined the server is using {0} authentication").format(authenticationType))
 
     if (authenticationType == "Digest"):
@@ -206,64 +217,132 @@ def handleRTSPtoGetRTP(ip, port, address, userAgent, username, password):
 
         # A 'chunk'
         sessionPacketNum = sessionPacketNum + 1;
-        payload = generateRTSPPacket("OPTIONS", address, userAgent, sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce)
+        payload = generateRTSPPacket("OPTIONS", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, uri=uri)
         lastResponse = sendPacket(payload)
-        print(payload.encode(), file=sys.stderr)
+        print("Payload: " + payload, file=sys.stderr)
         print('=============================')
-        print(lastResponse, file=sys.stderr)
-        #######################################
+        print("Response: " + lastResponse, file=sys.stderr)
+        ####################################### WHAT CAN I WORK WITH?
         sessionPacketNum = sessionPacketNum + 1;
-        payload = generateRTSPPacket("DESCRIBE", address, userAgent, sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce)
+        payload = generateRTSPPacket("DESCRIBE", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, uri=uri)
         lastResponse = sendPacket(payload)
-        print(payload.encode(), file=sys.stderr)
+        print("Payload: " + payload, file=sys.stderr)
         print('=============================')
-        print(lastResponse, file=sys.stderr)
+        print("Response: " + lastResponse, file=sys.stderr)
         ####################################### SETUP VIDEO
+        # sessionPacketNum = sessionPacketNum + 1;
+        # payload = generateRTSPPacket("SETUP", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, trackID="0", clientPorts=("14364", "14365"), uri=uri)
+        # lastResponse = sendPacket(payload)
+        # print("Payload: " + payload, file=sys.stderr)
+        # print('=============================')
+        # print("Response: " + lastResponse, file=sys.stderr)
+        
+        # SessionID comes from first SETUP
+        
+        # ####################################### SETUP AUDIO (We need the sessionID For this)
+        # sessionIdRaw = lastResponse.split()
+        # sessionId, timeout = sessionIdRaw[6].split(";", 1)
+        # #######################################
+        # sessionPacketNum = sessionPacketNum + 1;
+        # payload = generateRTSPPacket("SETUP", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, trackID="1", clientPorts=("14366", "14367"), sessionid=sessionId, uri=uri)
+        # lastResponse = sendPacket(payload)
+        # print("Payload: " + payload, file=sys.stderr)
+        # print('=============================')
+        # print("Response: " + lastResponse, file=sys.stderr)
+        ####################################### SETUP TWO WAY AUDIO ('BACKCHANNEL') (Literally just blasting RTP)
         sessionPacketNum = sessionPacketNum + 1;
-        payload = generateRTSPPacket("SETUP", address, userAgent, sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, trackID="0", clientPorts=("14364", "14365"))
+        payload = generateRTSPPacket("SETUP", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, trackID="5", clientPorts=("14368", "14369"), uri=uri)
         lastResponse = sendPacket(payload)
-        print(payload.encode(), file=sys.stderr)
+        print("Payload: " + payload, file=sys.stderr)
         print('=============================')
-        print(lastResponse, file=sys.stderr)
-        ####################################### SETUP AUDIO (We need the sessionID For this)
-        sessionIdRaw = lastResponse.split()
-        sessionId, timeout = sessionIdRaw[6].split(";", 1)
-        #######################################
-        sessionPacketNum = sessionPacketNum + 1;
-        payload = generateRTSPPacket("SETUP", address, userAgent, sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, trackID="1", clientPorts=("14366", "14367"), sessionid=sessionId)
-        lastResponse = sendPacket(payload)
-        print(payload.encode(), file=sys.stderr)
-        print('=============================')
-        print(lastResponse, file=sys.stderr)
+        print("Response: " + lastResponse, file=sys.stderr)
         #######################################
         # Now we can setup the receiving ports for video and audio.
-        createReceivingConnection()
+        # createReceivingConnection(14366, 14367)
+        
+        # From setup we now have the ports RTP is expected on the server, we extract those:
+        remotePorts = lastResponse.split()
+        remotePortsRange = remotePorts[8].split(";")
+        remotePortsExtract = remotePortsRange[3].split("=")
+        
+        global remotePortsExtract2
+        
+        remotePortsExtract2 = remotePortsExtract[1].split("-")
+        print(remotePortsExtract2)
+        
         # Now that sockets are setup, we can send 'play'
+        sessionIdRaw = lastResponse.split()
+        sessionId, timeout = sessionIdRaw[6].split(";", 1)
         sessionPacketNum = sessionPacketNum + 1;
-        payload = generateRTSPPacket("PLAY", address, userAgent, sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, sessionid=sessionId)
+        payload = generateRTSPPacket("PLAY", userAgent=userAgent, sessionNum=sessionPacketNum, genAuthString=True, username=username, password=password, realm=realm, nonce=nonce, sessionid=sessionId, uri="rtsp://10.x.x.x:554/trackID=5")
         lastResponse = sendPacket(payload)
-        print(payload.encode(), file=sys.stderr)
+        print("Payload: " + payload, file=sys.stderr)
         print('=============================')
-        print(lastResponse, file=sys.stderr)
+        print("Response: " + lastResponse, file=sys.stderr)
         #######################################
 
-        # Now that we have a flood of RTP on our two ports, we can forward them to our client with RTCPeer.
-        # We also can call the sockets from our main program since they are defined globally!
-        
+        #RTP Can now be received or sent based on SETUP
 
-    # closeConnection()
-
-def blastRTP():
-    global rtpVideoSocket;
-    def handleConnected(self):
-        print(self.address + " Connected!")
-        while True:
-            lastResponse = rtpVideoSocket.recv(4096)
-            print("SEND")
-            # echo message back to client
-            self.sendMessage(lastResponse)
+def readDiscardRTP(portRangeStart, portRangeEnd):
+   
     
-    #Now blasting RTP
-    # while True:
-        # websockets.send(lastResponse)
+    while True:
         
+        dataStart, addressStart = recvSocketStart.recvfrom(4096)
+        print(dataStart)
+        
+        dataEnd, addressEnd = recvSocketEnd.recvfrom(4096)
+        
+        
+def streamMp3ToRTSPServerAsBackChannel(mp3_file):
+    command = [
+        "ffmpeg",
+        "-re",
+        "-i", mp3_file,
+        "-filter:a", """volume=-20dB""", 
+        "-vn",
+        "-acodec", "pcm_alaw",
+        "-ar", "8000",
+        "-ac", "1",
+        "-f", "rtp",
+        "rtp://10.x.x.x:{0}?localrtpport=14368&localrtcpport=14369'".format(remotePortsExtract2[0]),
+        "-f", "null", "-"
+    ]
+    
+    commandMic = [
+        "ffmpeg",
+        "-re",
+        "-f", "alsa",
+        "-i", "default",
+        "-filter:a", """volume=-20dB""", 
+        "-vn",
+        "-acodec", "pcm_alaw",
+        "-ar", "8000",
+        "-ac", "1",
+        "-f", "rtp",
+        "rtp://10.x.x.x:{0}?localrtpport=14368&localrtcpport=14369'".format(remotePortsExtract2[0]),
+        "-f", "null", "-"
+    ]
+    
+    print(command)
+    
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+     # Wait for the command to finish
+    stdout, stderr = process.communicate()
+
+    # Print any output from FFmpeg
+    if stdout:
+        print(stdout.decode())
+    if stderr:
+        print(stderr.decode())
+    
+    
+
+if __name__ == "__main__":
+    handleRTSPtoGetRTP("10.x.x.x", 554, "/cam/realmonitor?channel=1&subtype=0#backchannel=1", "Agent", "username", "password")
+    
+    # discardThread = threading.Thread(target=readDiscardRTP, args=(14366, 14367))
+    # discardThread.start()
+    
+    streamMp3ToRTSPServerAsBackChannel("/path/to/mp3")
