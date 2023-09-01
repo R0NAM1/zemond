@@ -5,6 +5,7 @@ from globalFunctions import passwordRandomKey
 from flask import session, flash
 from bs4 import BeautifulSoup
 from onvifRequests import *
+from twoWayAudio import describePROBE
 import cryptocode
 
 import sys
@@ -83,9 +84,24 @@ def onvifAutoconfigure(cameraname):
         else:
             hasPTZ = True;
 
-        hasTWA = False;
 
-        # Does camera have Two Way Audio? Assume No Right now, needs RTSP weirdness to determine.
+        # Does camera have Two Way Audio? Can now figure out by calling twoWayAudio.py, describePROBE
+
+        hasTWA = False;
+        
+        #Figure out IP PORT SLASHADDRESS from cameraRTSPURL
+                
+        ip1 = cameraRTSPURL.split("//")
+        ip2 = ip1[1].split(":")
+        ip3 = ip2[0]
+        port1 = ip2[1].split("/")
+        port2 = int(port1[0])
+        slashAddress1 = ip2[1].split("554")
+        slashAddress2 = slashAddress1[1]
+        
+        hasTWA = describePROBE(camerausernameString, cryptocode.decrypt(str(cameraencryptedpasswordString), passwordRandomKey), ip3, port2, slashAddress2, "zemond/1.0")
+
+        print("Does support Two Way Audio?: " + hasTWA)
 
         myCursor.execute("INSERT INTO cameradb (model, manufacturer, hasptz, hastwa) VALUES(%s, %s, %s, %s)", (str(cameraModel), str(cameraManufacturer), hasPTZ, hasTWA))
         myDatabase.commit()

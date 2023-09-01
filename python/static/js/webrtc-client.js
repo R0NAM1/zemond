@@ -5,7 +5,7 @@ var pc = null;
 // PC Will Be The Server
 let stream = new MediaStream();
 // Stream is whatever we get from the server
-var dc = null, dcInterval = null, globalDcObject = null;
+var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micStream = null;
 
 // Data Channel
 
@@ -66,6 +66,7 @@ export function start() {
 
 
     // connect audio / video
+    // + audio backstream for 'two way audio'
     pc.addEventListener('track', function(evt) {
         if (evt.track.kind == 'video') {
             document.getElementById('video').srcObject = evt.streams[0]; // 'Video' includes audio as a substream
@@ -81,6 +82,7 @@ export function start() {
     // Add Data Channels For PingPong
 
     dc = pc.createDataChannel('chat') 
+    globalPcObject = pc;
     globalDcObject = dc;
     dc.onclose = function() {
         clearInterval(dcInterval);
@@ -103,7 +105,7 @@ export function start() {
 
         // Second check if message is a valid data type, valid types are defined below in webrtc_var_data_types
 
-        const webrtc_var_data_types = ["ptzcoordupdate|"];
+        const webrtc_var_data_types = ["ptzcoordupdate|", "truetwa"];
 
         // Depending on type, update variable
 
@@ -113,13 +115,14 @@ export function start() {
         let webrtc_var_data_types_index_return = webrtc_var_data_types.findIndex(type => lcData.includes(type));
         // -1 if not valid message.
 
-        let message_type = (webrtc_var_data_types.toString(webrtc_var_data_types_index_return));
+        let message_type = (webrtc_var_data_types[webrtc_var_data_types_index_return]);
 
         // Now message type is valid, extract data
 
         if (webrtc_var_data_types_index_return >= 0) {
             let webrtc_data = lcData.split("|")
             // console.log(webrtc_data[1])
+            // console.log(message_type)
         
             switch(message_type) {
 
@@ -128,7 +131,13 @@ export function start() {
                     document.getElementById('xyzcoordtext').innerHTML = "XYZ Coords: " + webrtc_data[1]
                     document.getElementById('xyzcoord').style.opacity = "1.0"
                     document.getElementById('xyzcoord').style.pointerEvents = "all"
-            }}
+                    break;
+
+                case 'truetwa':
+                    document.getElementById('twowayaudio').style.opacity = "1.0"
+                    document.getElementById('twowayaudio').style.pointerEvents = "all"
+                    break;
+                }}
 
 
     };
@@ -139,6 +148,31 @@ export function start() {
     negotiate(); // Negotiate clients and connect peers
 
     
+}
+
+export async function toggleTwoWayAudio() {
+
+    if (micToggled == false) {
+        console.log("Two Way Audio Toggle False")
+        // Set Button to toggled
+        document.getElementById('microphonetogglebutton').style.backgroundColor = "darkgrey"
+
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true});
+        const micTrack = micStream.getAudioTracks()[0];
+
+        globalPcObject.addTransceiver('audio', {direction: 'sendonly'});
+
+        micToggled = true
+    }
+    else if (micToggled == true) {
+        console.log("Two Way Audio Toggle True")
+
+        document.getElementById('microphonetogglebutton').style.backgroundColor = "lightgrey"
+
+        micStream.getAudioTracks().forEach(track => track.stop())
+
+        micToggled = false
+    }
 }
 
 export function sendPtzMessage(direction,speed) {

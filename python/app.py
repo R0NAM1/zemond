@@ -475,6 +475,12 @@ async def webRtcStart(uuid, dockerIP, cameraName):
     hasPTZTuple = myCursor.fetchone()
 
     hasPTZ = hasPTZTuple[0]
+    
+    #Check if camera hasTWA, send messege (truetwa) if so.
+    myCursor.execute("Select hastwa from cameradb where model = '{0}' ".format(cameraModel))
+    hasTWATuple = myCursor.fetchone()
+    hasTWA = hasTWATuple[0]
+    
 
     # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
 
@@ -483,6 +489,9 @@ async def webRtcStart(uuid, dockerIP, cameraName):
         if (hasPTZ == True):
             ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
             update_task = asyncio.ensure_future(updatePTZReadOut(webRtcPeer, cameraName, channel))  
+
+        if (hasTWA == True):
+            channel.send("truetwa")
 
         @channel.on("message")
         def on_message(message):

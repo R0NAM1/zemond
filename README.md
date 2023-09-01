@@ -17,3 +17,5 @@ Zemond runs with a Flask server, and Docker Containers for the active running co
 - onvif-watchdog, which logs ONVIF events to the database, (Shares globalfunctions.py with DB Object) (Includes Motion Events)
 
 This is by default, any and all of this is configurable.
+
+Eventually will also support SIP to two way audio cameras, since SIP phones are often more convenient then headsets.

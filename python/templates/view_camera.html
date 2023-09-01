@@ -14,11 +14,15 @@
 
     <script type="text/javascript">
         var cameraName = '{{ data[0] }}'
+        var micToggled = false
     </script>
 
     <script type="module">
         import {sendPtzMessage} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.sendPtzMessage = sendPtzMessage;
+
+        import {toggleTwoWayAudio} from "{{url_for('static', filename='js/webrtc-client.js')}}";
+        window.toggleTwoWayAudio = toggleTwoWayAudio;
      </script>
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
@@ -49,38 +53,55 @@
     </table>
 
     <div id="right-dash">
-        <div id="xyzcoord">
-            <b id="xyzcoordtext">XYZ Coords: (Static)</b>
-            <div class="joystick">
-                <div onmousedown="window.sendPtzMessage('up', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button up">↑</div>
-                <div onmousedown="window.sendPtzMessage('down', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button down">↓</div>
-                <div onmousedown="window.sendPtzMessage('left', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button left">←</div>
-                <div onmousedown="window.sendPtzMessage('right', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button right">→</div>
-                <div onmousedown="window.sendPtzMessage('positive', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centerpositive">+</div>
-                <div onmousedown="window.sendPtzMessage('negative', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centernegative">-</div>
+
+        <input type="checkbox" id="needControl">
+
+            <div id="xyzcoord">
+                <b id="xyzcoordtext">XYZ Coords: (Static)</b>
+                <div class="joystick">
+                    <div onmousedown="window.sendPtzMessage('up', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button up">↑</div>
+                    <div onmousedown="window.sendPtzMessage('down', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button down">↓</div>
+                    <div onmousedown="window.sendPtzMessage('left', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button left">←</div>
+                    <div onmousedown="window.sendPtzMessage('right', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button right">→</div>
+                    <div onmousedown="window.sendPtzMessage('positive', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centerpositive">+</div>
+                    <div onmousedown="window.sendPtzMessage('negative', speedSlider.value)" onmouseup="window.sendPtzMessage('stop')" class="button centernegative">-</div>
+                    
+                    <div class="slider-box">
+                        <b>Speed</b>
+                        <input class="slider" id="slider" list="slidermarkers" type="range" min="1" max="10" value="5">
                 
-                <div class="slider-box">
-                    <b>Speed</b>
-                    <input class="slider" id="slider" list="slidermarkers" type="range" min="1" max="10" value="5">
-            
-                    <datalist id="slidermarkers">
-                        <option label="1" value="1"></option>
-                        <option label="2" value="2"></option>
-                        <option label="3" value="3"></option>
-                        <option label="4" value="4"></option>
-                        <option label="5" value="5"></option>
-                        <option label="6" value="6"></option>
-                        <option label="7" value="7"></option>
-                        <option label="8" value="8"></option>
-                        <option label="9" value="9"></option>
-                        <option label="10" value="10"></option>
-                        </datalist>
+                        <datalist id="slidermarkers">
+                            <option label="1" value="1"></option>
+                            <option label="2" value="2"></option>
+                            <option label="3" value="3"></option>
+                            <option label="4" value="4"></option>
+                            <option label="5" value="5"></option>
+                            <option label="6" value="6"></option>
+                            <option label="7" value="7"></option>
+                            <option label="8" value="8"></option>
+                            <option label="9" value="9"></option>
+                            <option label="10" value="10"></option>
+                            </datalist>
+                    </div>
+                </div>
+                <div class="space">
+                    
                 </div>
             </div>
-            <div class="space">
-                
+
+            <div class="space"></div>
+
+            <div id="twowayaudio">
+                <b>Two-Way Audio Toggle</b>
+                <div class="space"></div>
+                <div onclick="window.toggleTwoWayAudio()" class="microphonetogglebutton" id="microphonetogglebutton"> 
+                    <img height="40" src="{{url_for('static', filename='microphone.png')}}"/>
+                </div>
+                <div class="space"></div>
+                <div class="space"></div>
             </div>
-        </div>
+
+        </input>
 
     </div>
     
