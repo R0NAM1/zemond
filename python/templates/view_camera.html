@@ -6,8 +6,17 @@
     <div> <b>{{ data[0] }}</b>                   <b>{{ data[6] }} {{ data[7] }}</b> </div>
 
     <div id="media">
+        
+        <div class="needMicModal" id="needMicModal">
+            <div class="innerMicModal">
+                <p> Due to AudioContext not allowing itself to start unless it is user requested, I need you to click on the button below to start the WebRTC Session.</p>
+                <input class="micmodalbutton" type="button"  value="Start Camera View" onclick="window.start()"></input>
+            </div>
+        </div>
+
         <audio id="audio" autoplay="true"></audio>
         <video controls="true" muted id="video" autoplay="true" playsinline="true" width="750"></video>
+
     </div> 
     
     <!--poster="{{url_for('static', filename='/pictures/loading.gif')}}"-->
@@ -23,6 +32,9 @@
 
         import {toggleTwoWayAudio} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.toggleTwoWayAudio = toggleTwoWayAudio;
+        
+        import {start} from "{{url_for('static', filename='js/webrtc-client.js')}}";
+        window.start = start;
      </script>
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>

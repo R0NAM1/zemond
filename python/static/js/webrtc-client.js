@@ -4,11 +4,10 @@ import '/static/node_modules/webrtc-adapter/out/adapter.js';
 var pc = null;
 // PC Will Be The Server
 let stream = new MediaStream();
+let outputStream;
 // Stream is whatever we get from the server
-var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micStream = null;
-
+var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micTrack = null, finalTrack = null;
 // Data Channel
-
 
 // This Function runs asycnronously, calls adapter.js to get the browser type and version, then creates an offer based on some
 // config to send to the server.
@@ -55,7 +54,7 @@ async function negotiate() {
 }
 
     // Start WebRTC
-export function start() {
+export async function startWebRtc(resampledMicTrack) {
     var config = {
         sdpSemantics: 'unified-plan', // Modern SDP format.
         iceServers: [{"urls": "stun:nvr.internal.my.domain"}] //This will be dynamic based on server config later
@@ -73,6 +72,7 @@ export function start() {
         }
     });
 
+    
     //For Ice troubleshooting
     // pc.addEventListener('iceconnectionstatechange', function(evt) {
     //     console.log("ICE Connection is: " + pc.connectionState)
@@ -105,7 +105,7 @@ export function start() {
 
         // Second check if message is a valid data type, valid types are defined below in webrtc_var_data_types
 
-        const webrtc_var_data_types = ["ptzcoordupdate|", "truetwa"];
+        const webrtc_var_data_types = ["ptzcoordupdate|", "truetwa", "falsetwa"];
 
         // Depending on type, update variable
 
@@ -143,33 +143,38 @@ export function start() {
     };
 
     pc.addTransceiver('video', {direction: 'recvonly'}); // We only receive video
-    pc.addTransceiver('audio', {direction: 'recvonly'}); // We only receive audio
+    pc.addTransceiver('audio', {direction: 'sendrecv'}); // We send and receive audio
+
+    // console.log(resampledMicTrack)
+    globalPcObject.addTrack(resampledMicTrack);
 
     negotiate(); // Negotiate clients and connect peers
-
-    
 }
+
 
 export async function toggleTwoWayAudio() {
 
     if (micToggled == false) {
-        console.log("Two Way Audio Toggle False")
+        // consoled.log("Two Way Audio Toggle False")
         // Set Button to toggled
         document.getElementById('microphonetogglebutton').style.backgroundColor = "darkgrey"
 
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true});
-        const micTrack = micStream.getAudioTracks()[0];
+        // FIGURED OUT ISSUE
+        // NOT SERVER SIDE, I WAS NEVER SENDING AUDIO DATA BECAUSE IT WAS NEVER ADDED
+        // SOLUTION: ASSIGN BLANK AUDIO DATA TO micTrack and reassign when wanting to send two way audio!!
 
-        globalPcObject.addTransceiver('audio', {direction: 'sendonly'});
+        globalDcObject.send("truetwa")
+
+        console.log(globalPcObject.getSenders())
 
         micToggled = true
     }
     else if (micToggled == true) {
-        console.log("Two Way Audio Toggle True")
+        // console.log("Two Way Audio Toggle True")
+
+        globalDcObject.send("falsetwa")
 
         document.getElementById('microphonetogglebutton').style.backgroundColor = "lightgrey"
-
-        micStream.getAudioTracks().forEach(track => track.stop())
 
         micToggled = false
     }
@@ -201,11 +206,34 @@ export function sendPtzMessage(direction,speed) {
 }
 
 export function stop() { // Close Peer, if wanted.
-
     // close peer connection
     setTimeout(function() {
         pc.close();
     }, 500);
 }
 
-window.onload = start() // When webpage is done loading, run the 'start()' function.
+export async function start() {
+    // OK, I've spent at least a two weeks on grabbing the Microphone audio, pumping it into a resampler to get it to 8000 samples,
+    // and then piped into the webrtc stream. Uding offline audio contexts, it SHOULD work.
+    // That used to be the above idea, I just send the raw audio data now :[
+    const myAudioContext = new AudioContext();
+
+    document.getElementById('needMicModal').style.display = 'none';
+
+   // Put Mic into MediaStream
+   const myMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+   // Put MediaStream into comptatable source
+   const myMediaStreamSource = myAudioContext.createMediaStreamSource(myMediaStream)
+
+//    console.log("Context Sample Rate: " + myAudioContext.sampleRate)
+
+   const myMediaStreamDestination = myAudioContext.createMediaStreamDestination();
+   myMediaStreamSource.connect(myMediaStreamDestination)
+
+   outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
+
+   startWebRtc(outputStream)
+}
+
+// window.onload = start(); // When webpage is done loading, run the 'startWebRtc()' function.
+//Can't run automatically now as AudoContext cannot load without user input :/

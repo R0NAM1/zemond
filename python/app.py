@@ -5,19 +5,20 @@ from bs4 import BeautifulSoup
 from io import BytesIO
 from threading import Thread, active_count
 from waitress import serve # Production server
-import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64
+import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer
 
 # WebRTC
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCDataChannel
-from aiortc.contrib.media import MediaPlayer, MediaRelay
+from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaBlackhole
 from aiortc.rtcrtpsender import RTCRtpSender
 
 #import Zemond Specific Parts
 from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
-from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely
+from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely, firstRunDockerCheck
 from ptzHandler import readPTZCoords, sendContMovCommand
+from twoWayAudio import streamBufferToRemote
 
 app = Flask(__name__)
 
@@ -26,6 +27,7 @@ app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practive, g
 global snapshotCache;
 
 pingTime = {}
+
 
 # ONVIF URL STANDARD: http(s)://ip.address/onvif/device_serivce 
 
@@ -414,10 +416,19 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
 
         await asyncio.sleep(0.5)
 
-def sendAuthenticatedPTZContMov(cameraName, direction, speed):
+def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
     # Get camera credentials
-    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-    camtuple = myCursor.fetchall()
+    
+    if (tmpCamTuple == False):
+        myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+        camtuple = myCursor.fetchall()
+        tmpCamTuple = True
+    elif (tmpCamTuple == True):
+        return
+    
+    print(tmpCamTuple)
+
+    
     camdata = camtuple[0]
     finalXVelocity = 0
     finalYVelocity = 0
@@ -440,8 +451,28 @@ def sendAuthenticatedPTZContMov(cameraName, direction, speed):
         finalXVelocity = 0
         finalYVelocity = 0
         zoom = 0
+        tmpCamTuple = False
+
     
     sendContMovCommand(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), finalXVelocity, finalYVelocity, zoom)
+
+
+
+
+# async def processWebRTCaudioToLocalBuffer(webRtcPeer, audioBufferFrameQueue):
+#     # I think the idea here is that we attach a 'consumer' to the webrtc track that exposes the buffer data we need, so every tick
+#     # the latest buffer is sent to the queue (Another function accesses object and removes what it consumes) to be processed when needed.
+#     print("Putting latest trackdata into buffer...")
+#     while True:
+#         try:
+#             audioBufferFrame = await webRtcAudioTrack.recv()
+            
+        
+#         except:
+#             print("Error In webRtc to Buffer")
+
+# Don't think I need, may retcon later.
+        
 
 async def webRtcStart(uuid, dockerIP, cameraName):
 
@@ -491,56 +522,92 @@ async def webRtcStart(uuid, dockerIP, cameraName):
             update_task = asyncio.ensure_future(updatePTZReadOut(webRtcPeer, cameraName, channel))  
 
         if (hasTWA == True):
-            channel.send("truetwa")
+            channel.send("truetwa") # Allows Remote TWA Toggle to be clicked
+
+            
+        tmpCamTuple = False
 
         @channel.on("message")
         def on_message(message):
-            global pingTime
+            global pingTime, myFuture
             if isinstance(message, str) and message.startswith("ping"):
                 pingTime[thisUUID] = time.time()
                 channel.send("pong" + message[4:])
             elif (message.startswith("up:")):
                 msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed, tmpCamTuple)
 
             elif (message.startswith("down:")):
                 msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed, tmpCamTuple)
 
             elif message.startswith("left:"):
                 msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed, tmpCamTuple)
 
             elif (message.startswith("right:")):
                 msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed, tmpCamTuple)
 
             elif (message.startswith("positive:")):
                 msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed, tmpCamTuple)
 
             elif (message.startswith("negative:")):
                 msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed)
+                sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed, tmpCamTuple)
 
             elif (message == "stop"):
-                sendAuthenticatedPTZContMov(cameraName, "stop", 0)
+                sendAuthenticatedPTZContMov(cameraName, "stop", 0, tmpCamTuple)
+                
+            elif (message == "truetwa"):
+                print("TWA Attempt Enable!!!!")                
+                
+                # Get DB Details to plug in below
+                myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+                camtuple = myCursor.fetchall()
+                camdata = camtuple[0]
+                
+                # Get IP, port and slashaddress
+
+                cameraIP1 = camdata[2].split("//")
+                cameraIP2 = cameraIP1[1].split("/")
+                cameraIP3 = cameraIP2[0].split(":")
+                                                
+                port1 = cameraIP1[1].split(":")
+                port2 = port1[1].split("/", 1)
+                port3 = port2[0]
+                
+                slashAddress = port2[1]
+                
+                # Now send to remote via threading.
+                myFuture = asyncio.create_task(
+                streamBufferToRemote(camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), cameraIP3[0], int(port3), slashAddress, webRtcPeer)
+                )
+                
+            elif (message == "falsetwa"):
+                print("CANCEL TWA")
+                print(myFuture)
+                myFuture.cancel()
+                
             elif ():
                 print("Closing Peer!")
                 webRtcPeer.close()
-            
+
+    # We always have the track added, but we don't have to do anything with it yet. We should when we get the truetwa break off into another thread that just processes the incoming audio into the buffer instance.
 
     if (player.video):
         webRtcPeer.addTrack(player.video)
     if (player.audio):
         webRtcPeer.addTrack(player.audio)
+   
 
     # Wait to Set Remote Description
     await webRtcPeer.setRemoteDescription(offer)
 
     # Generate Answer to Give To Peer
     answer = await webRtcPeer.createAnswer()
-
+    
     # Set Description of Peer to answer.
     await webRtcPeer.setLocalDescription(answer)
 
@@ -697,17 +764,34 @@ def updateSnapshots():
         print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
         time.sleep(15) # Time to wait between gathering snapshots
 
-if __name__ == '__main__':
-    # Start Snapshot Thread.
-    snapshotThread = Thread(target=updateSnapshots)
-    snapshotThread.start()
-
-    # Start Docker Management Thread, which checks the localcameras table and using that determines if all docker containers are runnning.
-    dockerThread = Thread(target=dockerWatcher)
-    dockerThread.start()
-
+def startProgramWhenChecksOut():
+    
     # Testing Web Server
     # app.run(host='0.0.0.0')
 
     # Production web server
     serve(app, host='0.0.0.0', port=5000)
+
+if __name__ == '__main__':
+    
+    dockerComposer.firstRunDockerCheck = False
+
+    # Start Docker Management Thread, which checks the localcameras table and using that determines if all docker containers are runnning.
+    dockerThread = Thread(target=dockerWatcher)
+    dockerThread.start()
+    
+    # DO NOT START OTHER THREADS UNTIL DOCKER MANAGEMENT IS DONE 
+    
+    while (dockerComposer.firstRunDockerCheck == False):
+        print("Docker check failed, waiting 5 seconds to check again.")
+        time.sleep(5)
+
+    if (dockerComposer.firstRunDockerCheck == True):
+        print("Docker check True! Start Web Interface in 10 seconds")
+          # Start Snapshot Thread.
+        snapshotThread = Thread(target=updateSnapshots)
+        snapshotThread.start()
+        time.sleep(10)
+        startProgramWhenChecksOut()
+
+    
