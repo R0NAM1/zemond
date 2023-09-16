@@ -1,11 +1,12 @@
+import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer # Have to import for just firstRun because of global weirdness
 from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory
 from flask_sock import Sock 
 from functools import wraps
 from bs4 import BeautifulSoup
 from io import BytesIO
 from threading import Thread, active_count
+from git import Repo
 from waitress import serve # Production server
-import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer
 
 # WebRTC
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCDataChannel
@@ -24,12 +25,21 @@ app = Flask(__name__)
 
 app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practive, generate some random hash string.
 
-global snapshotCache;
+global snapshotCache, userUUIDAssociations;
 
-pingTime = {}
+userUUIDAssociations = {}
 
+release_id = 'Alpha 0.0.1'
+
+commit_id = ''
 
 # ONVIF URL STANDARD: http(s)://ip.address/onvif/device_serivce 
+
+def setCommitID():
+    global commit_id
+    repo = Repo("./")
+    commit_id = repo.head.commit.hexsha
+    commit_id = commit_id[:10] + "..."
 
 # login required decorator
 def login_required(f):
@@ -57,34 +67,49 @@ def login():
     if request.method == 'POST':
         if request.form['username'] != 'admin' or request.form['password'] != 'admin':
             error = 'Invalid Credentials. Please try again.'
+            # GONNA DO! Seperate Module, userManagement.py
         else:
             session['logged_in'] = True
             flash('Your logged in!')
             return redirect(url_for('index'))
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error, commit_id=commit_id, release_id=release_id)
 
 @app.route('/logout/')
 @login_required
 def logout():
     session.pop('logged_in', None) # Pop goes the user session!
-    flash('You were logged out.')
+    flash('You were logged out for the following reason:')
     return redirect(url_for('index'))
 
 @app.route('/dashboard/')
 @login_required
 def dashboard():
-    return render_template('dashboard.html', camerasonline=onlineCameraCache)
+    return render_template('dashboard.html', camerasonline=onlineCameraCache, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
 
+@app.route('/monitors/')
+@login_required
+def monitors():
+    return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+# Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
+
+@app.route('/search/')
+@login_required
+def search():
+    return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+# Will allow looking back at all available footage currently written to disk from the time called, lists date and time footage starts,
+# allow selecting, highlighting, bookmarking, and exporting snapshots and mp4's. Will probably change how footage is wrote from mp4's
+# to .ts livestream chunks and try to embed current system time into it. 
 
 @app.route('/cameralist/')
 @login_required
 def cameraList():
-
     global snapshotCache
-
-    # Unlike lastime to build the table this time we need to assemble the final tuple here in script
+    
+    # Get all added cameras, put into tupple.
     myCursor.execute("Select * from localcameras ORDER BY name ASC")
     localcameras = myCursor.fetchall()
+    
+    # Get camera model details, and reference pic.
     myCursor.execute("Select * from cameradb")
     cameradb = myCursor.fetchall()
 
@@ -92,36 +117,30 @@ def cameraList():
 
     # To process: Get All From Local Cameras, associate with model number, using that 'add' data to the tuple
     dataToSend = None;
-
-
+    
+    # For every camera pulled, add it to the table we send to the client.
     for row in localcameras:
         # Get Current Name
         currentiname = row[0]
-        # First Generate Snapshot,
-         # Get Name's RTSP URI with username and password
-        currentiurlString = row[2]
 
         # Create httpurl
-        #http://ip.address/onvif/device_service
         httpurl = row[1]
         httpurl = httpurl.replace("/onvif/device_service", "")
         
         # Parse Snapshot Cache and get correct image in Iteration
-
         iterativeSnapshot = snapshotCache.get(currentiname)
-
-
-       
+        
         # Get Name's Model Number
         myCursor.execute("Select model from localcameras where name='{0}'".format(currentiname))
         currentimodel = myCursor.fetchone()
         currentimodelString = ''.join(currentimodel)
+        
         # Get Image From Model Number
         myCursor.execute("Select image from cameradb where model='{0}'".format(currentimodelString))
         imageToLoad = myCursor.fetchone()
         imageToLoadString = ''.join(imageToLoad)
 
-        # Create Info String For ManMod
+        # Create Info String For Manufacturer Model
 
          # Get Name's Manufacturer
         myCursor.execute("Select manufacturer from cameradb where model='{0}'".format(currentimodelString))
@@ -140,18 +159,16 @@ def cameraList():
             rawData = ((iterativeSnapshot, row[0], manmod, imageToLoadString, httpurl, parsedName), )
             dataToSend = (dataToSend) + (rawData)
 
-            
-
-
     # dataToSend = (("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"), ("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"))
     if dataToSend == None:
         dataToSend = (("", "No Camera's Added!", "", "", "", ""), )
-    return render_template('cameralist.html', data=dataToSend)
+        
+    return render_template('cameralist.html', data=dataToSend, commit_id=commit_id, release_id=release_id)
 
 @app.route('/settings/')
 @login_required
 def settings():
-    return render_template('settings.html')
+    return render_template('settings.html', commit_id=commit_id, release_id=release_id)
 
 # This one is automatic
 @app.route('/settings/add_camera/', methods=['GET', 'POST'])
@@ -182,7 +199,7 @@ def addCamera():
                 # Before storing all this, we need to verify a few things:
                 # Credentials must be correct and ONVIF must be supported.
                 # Server will give a 401 Unauth if Credentials are wrong
-                # A Un-Parseable resoinse if ONVIF is not supported, 200 If it is with what's expected from GetDeviceInfomation
+                # A Un-Parseable response if ONVIF is not supported, 200 If it is with what's expected from GetDeviceInfomation
 
                 # Send GetDeviceInfomation and determine action.
 
@@ -196,7 +213,7 @@ def addCamera():
 
                     parsedResponseXML = BeautifulSoup(response.text, 'xml')
 
-                    print(response.text)
+                    # print(response.text)
 
                     if (response.text.find("NotAuthorized") != -1):
                         session.pop('_flashes', None)
@@ -250,7 +267,7 @@ def addCamera():
                                 addRunningContainer(cameraname, rtspCredString, "268435456", "48")
                                 return redirect(url_for('dashboard'))
 
-    return render_template('add_camera.html')
+    return render_template('add_camera.html', commit_id=commit_id, release_id=release_id)
 
 # Manual, if having to use non-ONVIF RTSP video sources
 @app.route('/settings/add_camera_manual/', methods=['GET', 'POST'])
@@ -281,7 +298,7 @@ def addCameraManual():
             myDatabase.commit()
 
             return redirect(url_for('dashboard'))
-    return render_template('add_camera_manual.html')
+    return render_template('add_camera_manual.html', commit_id=commit_id, release_id=release_id)
 
 # List all camera models gathered over time
 @app.route('/settings/camera_models/', methods=['GET', 'POST'])
@@ -300,8 +317,7 @@ def cameraModels():
     myCursor.execute("Select * from cameradb")
     cameradb = myCursor.fetchall()
     allCameraModels = ''.join(str(cameradb))
-    return render_template('camera_models.html', data=cameradb)
-
+    return render_template('camera_models.html', data=cameradb, commit_id=commit_id, release_id=release_id)
 
 # Return Favicon
 @app.route('/favicon.ico')
@@ -310,6 +326,7 @@ def returnIcon():
                           'pictures/logo.png',mimetype='image/vnd.microsoft.icon')
 
 # View a camera, using WebRTC, and ONVIF Event Logs, with Recording Information and quick view, plus a link to the camera.
+# UUID Will be tied to the user, and hopefully when I pull the UUID from userUUIDAssociations watchdog will catch it and shut everything down.
 @app.route('/view_camera/<cam>', methods=['GET', 'POST'])
 @login_required
 def viewCamera(cam):
@@ -325,67 +342,56 @@ def viewCamera(cam):
     # Currently passing through the raw DB query.
     cameraModel = camdata[7]
    
-
-    # Below is WEBRTC Code, it is partially complex, but not really.
     # Both the client and server implement 'RTCRemotePeer' and can exchange SDP with HTTP POST. Use that SDP with the Peer and you
     # Have a remote WebRTC Peer you can send video to! All processing and reconstruction is done on the client side.
 
+    # SDP is published to /rtcoffer/<cam>
+
     # First we need to generate the raw datastream from the RTSP URL, we'll call another thread to do this, as it's temporary.
     # This writes a frame to the POST url buffer and consistantly updates it, 
-
-
-
-    # Used to use RTSPCredString to connect to camera directly, now connecting to local RTSP proxy.
 
     # We need to pass through a custom data string now, with Onvif Events as seperate string, both as follows:
     # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
     # 
     # Onvif Events: Time | Topic | Data
-
-
     # Get Onvif Events:
 
     myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC".format(cam))
     rawOnvifQuery = myCursor.fetchall()
 
-    return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery)  
-
-
-
-
-
-
-
-
+    return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id)  
 
 # WEBRTC ===================================
-# This is what runs forever, while the client is connected,
-# MASSIVELY SCREWEY DUE TO ME NOT KNOWING HOW TO THREAD PROPERLY.
-
-def webRtcWatchdog(uuid, rtcloop):
-    global pingTime
-    global watchdog
-    time.sleep(5) # Wait at least 5 seconds for client to connect.
+#
+def uuidWatchdog():
+    # Make a regular thread that checks all added UUIDS, and the pingtime attatched.
+    # If pingtime is above set value, stop and close.
+    global userUUIDAssociations
+    
     while True:
+        # Check every second
         time.sleep(1)
-        # If timer exceeds value, then run thread.stop;
+        # print(userUUIDAssociations)
 
-        # print("Current UUID for session is: " + str(uuid))
-
-        # print(pingTime[uuid])
-
-        diffTime = float(time.time()) - float(pingTime[uuid]) # Need to add a UUID along WITH pingtime so sessions don't intermix.
-
-        # print("Diff Time: " + str(diffTime))
-
-        if (diffTime > 5.0):
-            print("Running Threads Before: " + str(active_count()))
-            rtcloop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
-            time.sleep(3) # Wait three seconds for code to stop executing...
-            rtcloop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
-            print("Running Threads After: " + str(active_count()))
-            break
-    print("Broken Watchdog, thread should be terminating now!")
+        # Loop through each UUID and check Pingtime
+        for uuid in userUUIDAssociations:
+            # print("Check UUID: " + uuid)
+            iPingtime = userUUIDAssociations[uuid][1]
+            # print("Found Pingtime: " + str(iPingtime))
+            diffTime = float(time.time()) - float(iPingtime)
+            # print("Diff time:" + str(diffTime))
+            
+            if (diffTime > 5.0 and iPingtime > 0):
+                iLoop = userUUIDAssociations[uuid][2]
+                print("Running Threads Before: " + str(active_count()))
+                iLoop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
+                time.sleep(3) # Wait three seconds for code to stop executing...
+                iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
+                print("Running Threads After: " + str(active_count()))
+                print("Broken Watchdog, killing loop uuid: " + str(uuid))
+                # Remove from userUUIDAssociations
+                del userUUIDAssociations[uuid]
+                break
 
 async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
     # Get Camera Info
@@ -412,12 +418,15 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
         # print("Updating Coords to {0}".format(ptzcoords))
         
         # Publish Here
-        channel_object.send('ptzcoordupdate|' +str(ptzcoords))
-
+        try:
+            channel_object.send('ptzcoordupdate|' +str(ptzcoords))
+        except:
+            # Assume channel closed, return.
+            return
         await asyncio.sleep(0.5)
 
 def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
-    # Get camera credentials
+    # Get camera credentials once
     
     if (tmpCamTuple == False):
         myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
@@ -426,7 +435,7 @@ def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
     elif (tmpCamTuple == True):
         return
     
-    print(tmpCamTuple)
+    # print(tmpCamTuple)
 
     
     camdata = camtuple[0]
@@ -456,82 +465,55 @@ def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
     
     sendContMovCommand(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), finalXVelocity, finalYVelocity, zoom)
 
+# Initializes objects and connections we need.
+async def webRtcStart(thisUUID, dockerIP, cameraName):
 
-
-
-# async def processWebRTCaudioToLocalBuffer(webRtcPeer, audioBufferFrameQueue):
-#     # I think the idea here is that we attach a 'consumer' to the webrtc track that exposes the buffer data we need, so every tick
-#     # the latest buffer is sent to the queue (Another function accesses object and removes what it consumes) to be processed when needed.
-#     print("Putting latest trackdata into buffer...")
-#     while True:
-#         try:
-#             audioBufferFrame = await webRtcAudioTrack.recv()
-            
-        
-#         except:
-#             print("Error In webRtc to Buffer")
-
-# Don't think I need, may retcon later.
-        
-
-async def webRtcStart(uuid, dockerIP, cameraName):
-
-    global pingTime
-
-    thisUUID = uuid
-
-    pingTime[thisUUID] = ""
-    
-    # Get current loop
-    loop = asyncio.get_event_loop()
+    # Pingtime holds the UUID and the current ping time (Time since last ping pong message from client, if over 5 seconds or so get rid of)
+    global userUUIDAssociations
         
     # Set Media Source and decode offered data
-    player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1") # In the future the media source will be the local relay docker container that has the camera in question, instead of from the camera itself.
+    # Media source being local docker container and regular video frames
+    player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1")
     params = ast.literal_eval((request.data).decode("UTF-8"))
 
-    # Set ICE Server to local server CURRENTLY STATIC
+    # Set ICE Server to local server, hardcoded to be NVR, change at install!
     offer = RTCSessionDescription(sdp=params.get("sdp"), type=params.get("type"))
     webRtcPeer = RTCPeerConnection(configuration=RTCConfiguration(
     iceServers=[RTCIceServer(
         urls=['stun:nvr.internal.my.domain'])]))
 
     # We need to see if the camera supports PTZ, if it does prepare to send COORDS
+    # Select all info about current cam
     myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
     camtuple = myCursor.fetchall()
     camdata = camtuple[0]
+    
     # Currently passing through the raw DB query.
     cameraModel = camdata[7]
     ptzcoords = {}
-    myCursor.execute("Select hasptz from cameradb where model = '{0}' ".format(cameraModel))
-    hasPTZTuple = myCursor.fetchone()
-
-    hasPTZ = hasPTZTuple[0]
+    myCursor.execute("Select hasptz, hastwa from cameradb where model = '{0}' ".format(cameraModel))
+    hasEXTTuple = myCursor.fetchall()
     
-    #Check if camera hasTWA, send messege (truetwa) if so.
-    myCursor.execute("Select hastwa from cameradb where model = '{0}' ".format(cameraModel))
-    hasTWATuple = myCursor.fetchone()
-    hasTWA = hasTWATuple[0]
-    
+    hasPTZ = hasEXTTuple[0][0]
+    hasTWA = hasEXTTuple[0][1]    
 
     # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
-
     @webRtcPeer.on("datachannel")
     def on_datachannel(channel):
         if (hasPTZ == True):
             ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
-            update_task = asyncio.ensure_future(updatePTZReadOut(webRtcPeer, cameraName, channel))  
+            update_task = asyncio.create_task(updatePTZReadOut(webRtcPeer, cameraName, channel))  
 
         if (hasTWA == True):
             channel.send("truetwa") # Allows Remote TWA Toggle to be clicked
 
-            
         tmpCamTuple = False
 
         @channel.on("message")
-        def on_message(message):
-            global pingTime, myFuture
+        async def on_message(message):
+            global userUUIDAssociations
             if isinstance(message, str) and message.startswith("ping"):
-                pingTime[thisUUID] = time.time()
+                userUUIDAssociations[thisUUID][1] = time.time()
                 channel.send("pong" + message[4:])
             elif (message.startswith("up:")):
                 msgSpeed = message.split(":")[1] 
@@ -560,9 +542,7 @@ async def webRtcStart(uuid, dockerIP, cameraName):
             elif (message == "stop"):
                 sendAuthenticatedPTZContMov(cameraName, "stop", 0, tmpCamTuple)
                 
-            elif (message == "truetwa"):
-                print("TWA Attempt Enable!!!!")                
-                
+            elif (message == "truetwa"):                
                 # Get DB Details to plug in below
                 myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
                 camtuple = myCursor.fetchall()
@@ -581,20 +561,22 @@ async def webRtcStart(uuid, dockerIP, cameraName):
                 slashAddress = port2[1]
                 
                 # Now send to remote via threading.
-                myFuture = asyncio.create_task(
+                microphoneStreamFuture = asyncio.create_task(
                 streamBufferToRemote(camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), cameraIP3[0], int(port3), slashAddress, webRtcPeer)
                 )
+                # Add instance to uuid
+                userUUIDAssociations[thisUUID].append(microphoneStreamFuture) # Appended to 4
                 
             elif (message == "falsetwa"):
-                print("CANCEL TWA")
-                print(myFuture)
-                myFuture.cancel()
+                # print(userUUIDAssociations[thisUUID][4])
+                userUUIDAssociations[thisUUID][4].cancel()
+                await asyncio.sleep(5)
+                # print(userUUIDAssociations[thisUUID][4])
+                del userUUIDAssociations[thisUUID][4]
                 
             elif ():
-                print("Closing Peer!")
+                # print("Closing Peer!")
                 webRtcPeer.close()
-
-    # We always have the track added, but we don't have to do anything with it yet. We should when we get the truetwa break off into another thread that just processes the incoming audio into the buffer instance.
 
     if (player.video):
         webRtcPeer.addTrack(player.video)
@@ -618,13 +600,17 @@ async def webRtcStart(uuid, dockerIP, cameraName):
     # Retirn response
     return final
 
-# When we grab a WebRTC offer
+# When we grab a WebRTC offer from out browser client.
 @app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
 def webRTCOFFER(cam):
-
+    
+    thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
+    
+    # Get current user (Static currently)
+    thisUser = 'admin'
+    
     global webRTCThread
-    global watchdog
 
     # Get Docker IP
     # Get Name's Docker IP with username and password
@@ -632,31 +618,29 @@ def webRTCOFFER(cam):
     dockerIP = myCursor.fetchone()
     dockerIPString = ''.join(dockerIP)
 
-    # When running to return a variable, we need to set a server side UUID so sessions don't get muxxed together.
-
-    thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
-
     # Always create a new event loop for this session.
     rtcloop = asyncio.new_event_loop()
     asyncio.set_event_loop(rtcloop)
         
-    # Run an event into that loop until it's complete and returns a value
-    t = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString, cam))
+    # Not sure if I'd be able to replace this, but should be fine as is.
+    parsedSDP = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString, cam))
     
-
     # Now create a timer that is reset by Ping-Pong.
 
+    # Add generated info to userUUIDAssociation
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], microphoneStreamFuture[4] (4 appended)
+    userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False]
+
+    
     # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # Another thread so we don't block the code.
     webRTCThread = Thread(target=rtcloop.run_forever)
     webRTCThread.start()
-    watchdog = Thread(target=webRtcWatchdog, args=(thisUUID, rtcloop, )) # Create a watchdog that takes the UUID and Event Loop
-    watchdog.start()
-
+  
     # print("Current Number Of Running Threads: " + str(active_count()))
     
-    # Return Our Parsed SDP
-    return t.encode()
+    # Return Our Parsed SDP to the client
+    return parsedSDP.encode()
 
 
 # WEBRTC END ===================================
@@ -677,7 +661,7 @@ def deleteCamera():
         currentpassword = myCursor.fetchone()
         currentpasswordString = ''.join(currentpassword)
         # Originally wanted to hash submitted password and check if it matches with what's in DB,
-        # but cryptocode generates a different Hash :,
+        # but cryptocode generates a different Hash :/
         # Now I just decrypt the DB entry and compare.
         decryptedDBPASS =  cryptocode.decrypt(str(currentpasswordString), passwordRandomKey)
 
@@ -700,16 +684,14 @@ def deleteCamera():
     myCursor.execute("Select name from localcameras")
     camnames = myCursor.fetchall()
 
-    return render_template('delete_camera.html', data=camnames)  
+    return render_template('delete_camera.html', data=camnames, commit_id=commit_id, release_id=release_id)  
 
 
 def updateSnapshots():
 
-    time.sleep(5)
-
     while True:
         # This runs infinitly in another thread at program start,
-        # this gets a list of all the cameras, creates a string for each of them, (Perhaps one array, or tuple), then gets
+        # this gets a list of all the cameras, creates a string for each of them, (A Dictionary), then gets
         # a snapshot of it, and stores it. They can be called anytime.
 
         myCursor.execute("Select * from localcameras")
@@ -719,27 +701,23 @@ def updateSnapshots():
         global onlineCameraCache
         # Reset Temp Cache
 
-        tempCacne = {}
+        tempCache = {}
         tmpCameraCache = 0
 
         for row in localcameras:
             # Get Current Name
             currentiname = row[0]
-            # First Generate Snapshot,
-            # Get Name's RTSP URI with username and password
-            currentiurlString = row[2]
-            currentiusernameString = row[3]
-            # Get Current Camera's Password
-            currentipasswordString = row[4]
-
+            # Get Current IP
+            dockerIP = row[10]
+            # First Generate Snapshot, from docker container
+        
             # Assemble Credential Based RTSP URL
-            rtspCredString = 'rtsp://' + row[10] + ':8554/cam1'
+            dockerRtspUrl = ("rtsp://" + dockerIP + ":8554/cam1")
             os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
-            cap = cv2.VideoCapture(rtspCredString)
-            
+            cap = cv2.VideoCapture(dockerRtspUrl)
 
             if not cap.isOpened():
-                print('Cannot open RTSP stream')
+                # print('Cannot open RTSP stream')
                 # Assuming that docker container isn't started, just break the loop then try again.
                 break
             else:
@@ -757,22 +735,24 @@ def updateSnapshots():
             im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
 
             # Add data to dictionary as Name : IMG
-            tempCacne[currentiname]=im_b64
+            tempCache[currentiname]=im_b64
 
-        snapshotCache = tempCacne; # When temp Cache is finished filling, finalize it.
+        snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
         onlineCameraCache = tmpCameraCache;
         print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
-        time.sleep(15) # Time to wait between gathering snapshots
+        time.sleep(8) # Time to wait between gathering snapshots
 
-def startProgramWhenChecksOut():
-    
+def startWebClient():
     # Testing Web Server
     # app.run(host='0.0.0.0')
 
     # Production web server
+    print("Web Client Started.")
     serve(app, host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
+    
+    setCommitID()
     
     dockerComposer.firstRunDockerCheck = False
 
@@ -780,10 +760,10 @@ if __name__ == '__main__':
     dockerThread = Thread(target=dockerWatcher)
     dockerThread.start()
     
-    # DO NOT START OTHER THREADS UNTIL DOCKER MANAGEMENT IS DONE 
+    # Start rest of program after docker containers start
     
     while (dockerComposer.firstRunDockerCheck == False):
-        print("Docker check failed, waiting 5 seconds to check again.")
+        # print("Docker check failed, waiting 5 seconds to check again.")
         time.sleep(5)
 
     if (dockerComposer.firstRunDockerCheck == True):
@@ -791,7 +771,13 @@ if __name__ == '__main__':
           # Start Snapshot Thread.
         snapshotThread = Thread(target=updateSnapshots)
         snapshotThread.start()
+        
+        # UUID Pingtime watchdog thread, if any ping is above set threashold, grab rtcloop object and stop
+        uuidWatchdog = Thread(target=uuidWatchdog) # Create a watchdog that takes the UUID and Event Loop
+        uuidWatchdog.start()
+        
+        # Wait 10 seconds
         time.sleep(10)
-        startProgramWhenChecksOut()
+        startWebClient()
 
     

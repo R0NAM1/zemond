@@ -2,12 +2,13 @@ import '/static/node_modules/webrtc-adapter/out/adapter.js';
 // Adapter JS takes over certain functions if needed, for browser cross-compatability.
 // You just include it and it does the rest.
 var pc = null;
+
 // PC Will Be The Server
 let stream = new MediaStream();
 let outputStream;
+
 // Stream is whatever we get from the server
 var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micTrack = null, finalTrack = null;
-// Data Channel
 
 // This Function runs asycnronously, calls adapter.js to get the browser type and version, then creates an offer based on some
 // config to send to the server.
@@ -155,23 +156,14 @@ export async function startWebRtc(resampledMicTrack) {
 export async function toggleTwoWayAudio() {
 
     if (micToggled == false) {
-        // consoled.log("Two Way Audio Toggle False")
         // Set Button to toggled
         document.getElementById('microphonetogglebutton').style.backgroundColor = "darkgrey"
 
-        // FIGURED OUT ISSUE
-        // NOT SERVER SIDE, I WAS NEVER SENDING AUDIO DATA BECAUSE IT WAS NEVER ADDED
-        // SOLUTION: ASSIGN BLANK AUDIO DATA TO micTrack and reassign when wanting to send two way audio!!
-
         globalDcObject.send("truetwa")
-
-        console.log(globalPcObject.getSenders())
 
         micToggled = true
     }
     else if (micToggled == true) {
-        // console.log("Two Way Audio Toggle True")
-
         globalDcObject.send("falsetwa")
 
         document.getElementById('microphonetogglebutton').style.backgroundColor = "lightgrey"

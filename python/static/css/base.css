@@ -1,0 +1,12 @@
+.bottom-bar {
+    background-color: #343a40;
+    padding: 10px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+  }
+
+.versionids {
+    color: whitesmoke
+}
