@@ -5,7 +5,7 @@ Programs Used:
 - RTSP-SIMPLE-SERVER for rebroadcasting the camera's RTSP stream to save bandwidth in LAN. (https://github.com/aler9/rtsp-simple-server)
 - Docker, for process seperation.
 - SupervisorD, for process management.
-- FFMPEG, For Recording to Disk.
+- FFMPEG, For Recording to Disk and streaming Two Way Audio to the camera.
 - Python and Flask for the Webserver.
 
 Zemond runs with a Flask server, and Docker Containers for the active running code. The python takes care of the Webserver and other tasks needed, while Docker isolates the individual camera processes, in each Container runs the following processes:
@@ -18,4 +18,16 @@ Zemond runs with a Flask server, and Docker Containers for the active running co
 
 This is by default, any and all of this is configurable.
 
-Eventually will also support SIP to two way audio cameras, since SIP phones are often more convenient then headsets.
+Zemond is great for the home, buisness or any other place that needs security. The following features are planned:
+- Live Video and Audio to the Browser (Done)
+- PTZ To the camera (Done)
+- Voice to the camera from client (Done)
+- Voice from a SIP endpoint to the zemond server, routed to the camera.
+- User management.
+- Multi-monitor mode, with maps you can customize and preset dashboards.
+- A timeline search, so you can export and snapshot certain chunks of footage.
+- Plugins for (AI detection, license plate detection, other behaviors), just ran as a seperate thread definition.
+- User audit log
+- Custom video element controls
+
+(Snapshots and promo crap, reference other git repos)

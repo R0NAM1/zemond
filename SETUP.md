@@ -33,3 +33,5 @@ In both search for the string 'nvr.internal.my.domain' and set it to your specif
 # TODO
 
 To test the server, run 'python3 app.py'
+
+(In case requirements.txt changes, run pip3 freeze > requirements.txt)
