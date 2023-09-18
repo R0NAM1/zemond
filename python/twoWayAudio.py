@@ -262,12 +262,12 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
         relay = MediaRelay()
         audioTrack = receiver.track
         proxy_track = relay.subscribe(audioTrack)
-        
         # The gold, ffmpeg command to take in my chucnk buffer and deliver it to my camera
         command = " ".join([
             "ffmpeg",
             "-re",
-            "-itsoffset", "-00:00:10", 
+            "-analyzeduration", "0",
+            "-itsoffset", "-00:00:15", 
             "-c:a", "pcm_s16le",
             "-i", "pipe:0",
             # "-v", "trace", 
@@ -279,7 +279,7 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
             "-f", "rtp",
             "rtp://{0}:{1}?localrtpport=14368&localrtcpport=14369'".format(cameraIP, remotePortsExtract2[0])
         ])
-        
+                
         process = await asyncio.create_subprocess_exec(*command.split(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         
         async def updateAudioBufferLoop():
@@ -293,7 +293,9 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
                     # Grab latest audioframe, stuff into buffer and write to process stdin
                     frontBuffer = (audioFrame.to_ndarray().tobytes())
                     process.stdin.write(frontBuffer)
-
+                    # if doOnce == False:
+                    #     print("Wrote first buffer to ffmpeg")
+                    #     doOnce = True
                 except Exception as e:
                     print("Error In Retrieving WebRTC Incoming Audio Data, exception follows: " + str(e))
                     process.stdin.close()
@@ -309,10 +311,11 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
             print(stderr.decode())
             
     except asyncio.CancelledError:
-        # print("Microphone task was cancelled, is done.")
+        # print("Should Be Cancelled")
         update_task.cancel()
         process.stdin.close()
         await process.wait()
+        # print("Process Closed")
         raise    
         
 def describePROBE(username, password, ip, port, slashAddress, userAgent):  

@@ -75,6 +75,12 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS credentials (
    username VARCHAR(50) ,
    password VARCHAR(5000));""")
 
+# Create User Table
+cursor.execute("""CREATE TABLE IF NOT EXISTS userTable (
+   username VARCHAR(50),
+   password VARCHAR(5000),
+   permissions ARRAY;""")
+
 # Commit Changes To Database
 myDatabase.commit()
 

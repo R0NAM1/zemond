@@ -53,7 +53,11 @@
             </li>
             </ul>
         </div>
+        <div class="username">
+        {{ current_user.username }}
+        </div>
     </nav>
+
     <div class="container" id="main-content">
         {% block content %} {% endblock %}
     </div>

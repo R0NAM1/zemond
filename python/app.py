@@ -1,6 +1,7 @@
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer # Have to import for just firstRun because of global weirdness
-from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory
-from flask_sock import Sock 
+from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup
+from flask_sock import Sock
+from flask_login import LoginManager, UserMixin, login_user, current_user
 from functools import wraps
 from bs4 import BeautifulSoup
 from io import BytesIO
@@ -20,10 +21,27 @@ from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRe
 from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely, firstRunDockerCheck
 from ptzHandler import readPTZCoords, sendContMovCommand
 from twoWayAudio import streamBufferToRemote
+from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword
 
 app = Flask(__name__)
+login_manager = LoginManager(app)
+login_manager.init_app(app)
 
-app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practive, generate some random hash string.
+app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practice, generate some random hash string.
+
+# Customer User object that Flask_login requires, just takes a string and returns it as self.username (User(username))
+# Also returns other flaskio funnies, is_active True, is_anon False, I handle all that logic.
+class User(UserMixin):
+    def __init__(self, username):
+        self.username = username
+    # All users can login
+    def is_active(self):
+        return True
+    def is_anonymous(self):
+        return False
+    # Return username as ID
+    def get_id(self):
+        return self.username
 
 global snapshotCache, userUUIDAssociations;
 
@@ -41,10 +59,11 @@ def setCommitID():
     commit_id = repo.head.commit.hexsha
     commit_id = commit_id[:10] + "..."
 
-# login required decorator
+# If not logged_in, make em!
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
+        # print(str(session))
         if 'logged_in' in session:
             return f(*args, **kwargs)
         else:
@@ -52,26 +71,39 @@ def login_required(f):
             return redirect(url_for('login'))
     return wrap
 
-# By default, route to the dashboard.
+# Required Flaskio Decorator, calls my required User object that Flaskio likes
+@login_manager.user_loader
+def load_user(username):
+    return User(username)
+
+# Redirect to the dashboard if at root index
 @app.route('/')
 @login_required
 def index():
     return redirect(url_for('dashboard'))
 
 # Route for handling the login page logic
-# No user logic yet, only admin. Future options will be:
-# Built in, LDAP, AD by group linking. 
 @app.route('/login/', methods=['GET', 'POST'])
 def login():
+    session.pop('_flashes', None)
     error = None
     if request.method == 'POST':
-        if request.form['username'] != 'admin' or request.form['password'] != 'admin':
-            error = 'Invalid Credentials. Please try again.'
-            # GONNA DO! Seperate Module, userManagement.py
-        else:
+        inputtedUsername = request.form['username']
+        # Check if username exists in database
+        if verifyUserPassword(inputtedUsername, request.form['password']):
+            localUserObject = User(inputtedUsername)
+            # Register user with flask session by passing in username as string, and it makes it a user object same character set as string
+            # "user" --> user (as instance of User())
+            login_user(localUserObject)
+            # Set logged_in to true so can access any page
             session['logged_in'] = True
+            session.pop('_flashes', None)
             flash('Your logged in!')
             return redirect(url_for('index'))
+        
+        else:
+            session.pop('_flashes', None)
+            flash('Username or Password is incorrect!')
     return render_template('login.html', error=error, commit_id=commit_id, release_id=release_id)
 
 @app.route('/logout/')
@@ -84,17 +116,27 @@ def logout():
 @app.route('/dashboard/')
 @login_required
 def dashboard():
-    return render_template('dashboard.html', camerasonline=onlineCameraCache, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
+    session.pop('_flashes', None)
+    # Return general stats, num cameras online, offline, usersloggedin,
+    # Grab total number of cameras from database
+    myCursor.execute("Select name from localcameras;")
+    localcameras = myCursor.fetchall()
+    totalCamNum = len(localcameras)
+    offlineCamNum = (totalCamNum - onlineCameraCache)
+    # print(str(login_manager._login_disabled))
+    return render_template('dashboard.html', camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
 
 @app.route('/monitors/')
 @login_required
 def monitors():
+    session.pop('_flashes', None)
     return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
 
 @app.route('/search/')
 @login_required
 def search():
+    session.pop('_flashes', None)
     return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
 # Will allow looking back at all available footage currently written to disk from the time called, lists date and time footage starts,
 # allow selecting, highlighting, bookmarking, and exporting snapshots and mp4's. Will probably change how footage is wrote from mp4's
@@ -103,6 +145,7 @@ def search():
 @app.route('/cameralist/')
 @login_required
 def cameraList():
+    session.pop('_flashes', None)
     global snapshotCache
     
     # Get all added cameras, put into tupple.
@@ -168,12 +211,112 @@ def cameraList():
 @app.route('/settings/')
 @login_required
 def settings():
+    session.pop('_flashes', None)
     return render_template('settings.html', commit_id=commit_id, release_id=release_id)
+
+# When adding a user manually, do it here
+@app.route('/settings/add_user/', methods=['GET', 'POST'])
+@login_required
+def addUser():
+    session.pop('_flashes', None)
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if not username:
+            session.pop('_flashes', None)
+            flash('Username is required!')
+        elif not password:
+            session.pop('_flashes', None)
+            flash('Password is required!')
+        else:
+            didGetUser = createUser(username, password)
+            if didGetUser:
+                session.pop('_flashes', None)
+                flash('User created!')
+            elif not didGetUser:
+                session.pop('_flashes', None)
+                reset_pass_link = Markup('<a href="' + url_for('resetPassword') + '">reset password instead?</a>')
+                flash('User exists, ' + reset_pass_link)
+
+    return render_template('add_user.html', commit_id=commit_id, release_id=release_id)
+
+# If a user needs a password reset
+@app.route('/settings/reset_password/', methods=['GET', 'POST'])
+@login_required
+def resetPassword():
+    session.pop('_flashes', None)
+    if request.method == 'POST':
+            username = request.form['username']
+            password = request.form['password']
+            if not username:
+                session.pop('_flashes', None)
+                flash('Username is required!')
+            elif not password:
+                session.pop('_flashes', None)
+                flash('Password is required!')
+            else:
+                # Check if user exists... if so 
+                userExists = verifyDbUser(username)
+                if userExists:
+                    # Privlige check, auditUser.userPassword.reset(username) Get True Or False based on if has privledge
+                    # Implement eventually
+                    resetUserPass(username, password)
+                    session.pop('_flashes', None)
+                    flash('User password reset.')
+                else:
+                    session.pop('_flashes', None)
+                    flash('User does not exist.')
+
+    return render_template('reset_password.html', commit_id=commit_id, release_id=release_id)
+
+# User delete requested, route here
+@app.route('/settings/delete_user/', methods=['GET', 'POST'])
+@login_required
+def deleteUser():
+    session.pop('_flashes', None)
+    sessionUsername = current_user.username
+    if request.method == 'POST':
+        postpassword = request.form['postpassword']
+        # Get User Password, verify user, verify permissions, delete user.
+        #audit
+        
+        myCursor.execute("Select password from userTable WHERE username='{0}'".format(sessionUsername))
+        dbPass = myCursor.fetchone()
+        currentDbPass = ''.join(dbPass)
+        # Originally wanted to hash submitted password and check if it matches with what's in DB,
+        # but cryptocode generates a different Hash :/
+        # Now I just decrypt the DB entry and compare.
+    
+        if postpassword == cryptocode.decrypt(str(currentDbPass), passwordRandomKey):
+            # User entered password, now verify del user exists and del
+            if verifyUserPassword(current_user.username, postpassword):
+                # Now delete the DB entry of the cameraName
+                myCursor.execute("DELETE FROM userTable where username='{0}'".format(sessionUsername))
+                myDatabase.commit()
+
+
+    # Get all camera's
+    myCursor.execute("Select name from localcameras")
+    camnames = myCursor.fetchall()
+
+    # Generate user list from userTable
+    myCursor.execute("Select username from userTable;")
+    dbList = myCursor.fetchall()
+    
+    userList = []
+    
+    for user in dbList:
+        if user[0] != sessionUsername:
+            userList.append(user[0])
+        
+    return render_template('delete_user.html', userList=userList, commit_id=commit_id, release_id=release_id)  
+
 
 # This one is automatic
 @app.route('/settings/add_camera/', methods=['GET', 'POST'])
 @login_required
 def addCamera():
+    session.pop('_flashes', None)
     if request.method == 'POST':
         cameraname = request.form['cameraname']
         onvifURL = request.form['onvifURL']
@@ -273,6 +416,7 @@ def addCamera():
 @app.route('/settings/add_camera_manual/', methods=['GET', 'POST'])
 @login_required
 def addCameraManual():
+    session.pop('_flashes', None)
     if request.method == 'POST':
         cameraname = request.form['cameraname']
         onvifURL = request.form['onvifURL']
@@ -304,6 +448,7 @@ def addCameraManual():
 @app.route('/settings/camera_models/', methods=['GET', 'POST'])
 @login_required
 def cameraModels():
+    session.pop('_flashes', None)
     if request.method == 'POST':
         if 'cameraimage' not in request.files:
             return 'cameraimage not in form!'
@@ -330,6 +475,7 @@ def returnIcon():
 @app.route('/view_camera/<cam>', methods=['GET', 'POST'])
 @login_required
 def viewCamera(cam):
+    session.pop('_flashes', None)
     global player
 
     # To view the camera, we need to custom make the data we are going to pass over, like in the Camera List. Formatted as follows:
@@ -608,7 +754,7 @@ def webRTCOFFER(cam):
     thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
     
     # Get current user (Static currently)
-    thisUser = 'admin'
+    thisUser = current_user.username
     
     global webRTCThread
 
@@ -648,9 +794,10 @@ def webRTCOFFER(cam):
 @app.route('/settings/delete_camera/', methods=['GET', 'POST'])
 @login_required
 def deleteCamera():
+    session.pop('_flashes', None)
     if request.method == 'POST':
         campass = request.form['campass']
-        userpass = request.form['userpass']
+        postpassword = request.form['userpass']
         cameraName = request.form['camname']
         # This post request will only run if both of these values not only
         # First check Camera Password Against Server, pull from DB
@@ -665,11 +812,9 @@ def deleteCamera():
         # Now I just decrypt the DB entry and compare.
         decryptedDBPASS =  cryptocode.decrypt(str(currentpasswordString), passwordRandomKey)
 
-
         if campass == decryptedDBPASS:
             # Now check if the user password matches
-            # Note: Temporaraly just checking if password is 'admin', test credentials.
-            if userpass == 'admin':
+            if verifyUserPassword(current_user.username, postpassword):
                 # Now delete the DB entry of the cameraName
                 myCursor.execute("DELETE FROM localcameras where name='{0}'".format(cameraName))
                 myDatabase.commit()
@@ -779,5 +924,3 @@ if __name__ == '__main__':
         # Wait 10 seconds
         time.sleep(10)
         startWebClient()
-
-    
