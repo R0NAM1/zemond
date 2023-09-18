@@ -8,7 +8,73 @@ let stream = new MediaStream();
 let outputStream;
 
 // Stream is whatever we get from the server
-var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micTrack = null, finalTrack = null;
+var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micTrack = null, finalTrack = null, hasCameraControl = false, hasTWA = false, hasPTZ = false, gpButton = false;
+var hasMicControl = false;
+
+// Game pad loop to check buttons, probably run async
+async function gamepadLoopCheck() {
+    var gamepads = navigator.getGamepads();
+    var gamepad = gamepads[0];
+
+    // If Permission is granted:
+    if (hasPTZ && hasCameraControl) {
+    // If I get a gamepad
+        if (gpButton == false) {
+            // DPAD UP (Axis 7: -1)
+            // DPAD DOWN (Axis 7: 1)
+            // DPAD LEFT (Axis 6: -1)
+            // DPAD RIGHT (Axis 6: 1)
+            // DPAD left up (Axis 1: -1)
+            // DPAD left down (Axis 1: 1)
+            
+            if (gamepad.axes[1] > 0.75) {
+                console.log("-");
+                sendPtzMessage('negative', speedSlider.value)
+                gpButton = true;
+            }
+            else if (gamepad.axes[1] < -0.75) {
+                console.log("+");
+                sendPtzMessage('positive', speedSlider.value)
+                gpButton = true;
+            }
+            else if (gamepad.axes[6] == 1) {
+                console.log("Right");
+                sendPtzMessage('right', speedSlider.value)
+                gpButton = true;
+
+            }else if (gamepad.axes[6] == -1) {
+                console.log("Left");
+                sendPtzMessage('left', speedSlider.value)
+                gpButton = true;
+
+            }else if (gamepad.axes[7] == 1) {
+                console.log("Down");
+                sendPtzMessage('down', speedSlider.value)
+                gpButton = true;
+
+            }else if (gamepad.axes[7] == -1) {
+                console.log("Up")
+                sendPtzMessage('up', speedSlider.value)
+                gpButton = true;
+            }
+        }
+        else if (gpButton == true) {
+            // Check if I'm still pressing buttons
+            if (gamepad.axes[1] < 0.75 && gamepad.axes[1] > -0.75 && gamepad.axes[6] == 0 && gamepad.axes[7] == 0) {
+                gpButton = false;
+                console.log("Not pressing a button")
+                sendPtzMessage('stop');
+            }
+           
+        }
+    }
+}
+ // Axis check
+            // for (var i = 0; i < gamepad.axes.length; i++) {
+            //     var axis = gamepad.axes[i];
+            //     console.log("Axis " + i + ": value = " + axis);
+            //   }
+
 
 // This Function runs asycnronously, calls adapter.js to get the browser type and version, then creates an offer based on some
 // config to send to the server.
@@ -106,7 +172,7 @@ export async function startWebRtc(resampledMicTrack) {
 
         // Second check if message is a valid data type, valid types are defined below in webrtc_var_data_types
 
-        const webrtc_var_data_types = ["ptzcoordupdate|", "truetwa", "falsetwa"];
+        const webrtc_var_data_types = ["ptzcoordupdate|", "truetwa", "controlallow", "controldeny", "controlbreak"];
 
         // Depending on type, update variable
 
@@ -124,22 +190,66 @@ export async function startWebRtc(resampledMicTrack) {
             let webrtc_data = lcData.split("|")
             // console.log(webrtc_data[1])
             // console.log(message_type)
-        
+            // If valid message allow control allow
+            document.getElementById('controlButton').style.opacity = "1.0"
+            document.getElementById('controlButton').style.pointerEvents = "all"
+
             switch(message_type) {
 
                 case 'ptzcoordupdate|':
-
-                    document.getElementById('xyzcoordtext').innerHTML = "XYZ Coords: " + webrtc_data[1]
-                    document.getElementById('xyzcoord').style.opacity = "1.0"
-                    document.getElementById('xyzcoord').style.pointerEvents = "all"
-                    break;
+                    hasPTZ = true;
+                        document.getElementById('xyzcoordtext').innerHTML = "XYZ Coords: " + webrtc_data[1]
+                    if (hasCameraControl == true) {
+                        document.getElementById('xyzcoord').style.opacity = "1.0"
+                        document.getElementById('xyzcoord').style.pointerEvents = "all"
+                    } else {
+                        document.getElementById('xyzcoord').style.opacity = "0.6"
+                        document.getElementById('xyzcoord').style.pointerEvents = "none"
+                    }
+                        break;
 
                 case 'truetwa':
-                    document.getElementById('twowayaudio').style.opacity = "1.0"
-                    document.getElementById('twowayaudio').style.pointerEvents = "all"
+                    hasTWA = true; 
                     break;
-                }}
 
+                case 'controlallow':
+                    hasCameraControl = true;
+                    document.getElementById('controlButton').value = "Relenquish Control"
+                    document.getElementById('needControl').style.opacity = "1.0"
+                    document.getElementById('needControl').style.pointerEvents = "all"
+                    if (hasTWA) {
+                        document.getElementById('twowayaudio').style.opacity = "1.0"
+                        document.getElementById('twowayaudio').style.pointerEvents = "all"
+                    }
+                    break;
+
+                case 'controldeny':
+                    hasCameraControl = false;
+                    document.getElementById('controlButton').value = "Control Denied"
+                    document.getElementById('needControl').style.opacity = "0.6"
+                    document.getElementById('needControl').style.pointerEvents = "none"
+                    document.getElementById('xyzcoord').style.opacity = "0.6"
+                    document.getElementById('xyzcoord').style.pointerEvents = "none"
+                    if (hasTWA) {
+                        document.getElementById('twowayaudio').style.opacity = "0.6"
+                        document.getElementById('twowayaudio').style.pointerEvents = "none"
+                    }
+      
+                    break;
+                
+                case 'controlbreak':
+                    hasCameraControl = false;
+                    document.getElementById('needControl').style.opacity = "0.6"
+                    document.getElementById('needControl').style.pointerEvents = "none"
+                    document.getElementById('xyzcoord').style.opacity = "0.6"
+                    document.getElementById('xyzcoord').style.pointerEvents = "none"
+                    if (hasTWA) {
+                        document.getElementById('twowayaudio').style.opacity = "0.6"
+                        document.getElementById('twowayaudio').style.pointerEvents = "none"
+                    }
+                    document.getElementById('controlButton').value = "Request Control"
+                }
+            }
 
     };
 
@@ -147,7 +257,9 @@ export async function startWebRtc(resampledMicTrack) {
     pc.addTransceiver('audio', {direction: 'sendrecv'}); // We send and receive audio
 
     // console.log(resampledMicTrack)
-    globalPcObject.addTrack(resampledMicTrack);
+    if (hasMicControl == true) {
+        globalPcObject.addTrack(resampledMicTrack);
+    }
 
     negotiate(); // Negotiate clients and connect peers
 }
@@ -197,6 +309,11 @@ export function sendPtzMessage(direction,speed) {
     }
 }
 
+export function requestCameraControl() {
+    // Send WebRTC Message and wait for either yay or nay from server
+    globalDcObject.send("requestCameraControl")
+}
+
 export function stop() { // Close Peer, if wanted.
     // close peer connection
     setTimeout(function() {
@@ -212,19 +329,33 @@ export async function start() {
 
     document.getElementById('needMicModal').style.display = 'none';
 
+
+   // For fun, if a gamepad is detected, allow it to control the PTZ controls, but need to check if allowed from server.
+   window.addEventListener('gamepadconnected', function(event) {
+    var gamepad = event.gamepad;
+    console.log('Gamepad connected: ' + gamepad.id);
+    setInterval(gamepadLoopCheck, 100);
+    });
+
    // Put Mic into MediaStream
-   const myMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-   // Put MediaStream into comptatable source
-   const myMediaStreamSource = myAudioContext.createMediaStreamSource(myMediaStream)
+   try {
+        const myMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        // Put MediaStream into comptatable source
+        const myMediaStreamSource = myAudioContext.createMediaStreamSource(myMediaStream)
 
-//    console.log("Context Sample Rate: " + myAudioContext.sampleRate)
+        //    console.log("Context Sample Rate: " + myAudioContext.sampleRate)
 
-   const myMediaStreamDestination = myAudioContext.createMediaStreamDestination();
-   myMediaStreamSource.connect(myMediaStreamDestination)
+        const myMediaStreamDestination = myAudioContext.createMediaStreamDestination();
+        myMediaStreamSource.connect(myMediaStreamDestination)
 
-   outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
+        outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
+   
+        startWebRtc(outputStream)
+    }
+    catch {
+        startWebRtc()
+    }
 
-   startWebRtc(outputStream)
 }
 
 // window.onload = start(); // When webpage is done loading, run the 'startWebRtc()' function.

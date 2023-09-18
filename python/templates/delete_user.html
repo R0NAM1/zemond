@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+    <p>Delete User (Cannot delete your own):</p>
+        {% for row in userList %}
+            <h1 style="cursor:pointer;" onclick="deleteUserConfirm('{{ row }}')">&#x2022; {{ row }}</h1>
+            <h1>----------------------------------------</h1>
+        {% endfor %}
+
+
+<script type="text/javascript">
+    var usernames = '{{ userList }}'
+</script>
+
+<script src="{{url_for('static', filename='js/delete_user.js')}}"></script>
+<link rel="stylesheet" href="{{url_for('static', filename='css/delete_camera.css')}}">
+
+<!-- Apparently CSS based Pop-ups are called 'Modals' -->
+<div id="passwordpopup" class="modal">
+
+    <!-- Modal content -->
+    <div id="popup-content" class="popup-content">
+      <span class="close">&times;</span>
+      <p>Delete [selectedUser]?</p>
+
+      <form action="" method="post" id="form">
+        <input type="password" placeholder="Your Password To Confirm" name="postpassword" value="{{
+          request.form.postpassword }}">
+
+        <input type="hidden" name="postpassword" value="[selectedUser]">
+        <input class="btn btn-default" type="submit" value="Delete!">
+      </form>
+      
+    </div>
+  
+  
+</div>
+    
+{% endblock %}

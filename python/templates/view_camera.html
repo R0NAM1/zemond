@@ -33,6 +33,9 @@
         import {toggleTwoWayAudio} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.toggleTwoWayAudio = toggleTwoWayAudio;
         
+        import {requestCameraControl} from "{{url_for('static', filename='js/webrtc-client.js')}}";
+        window.requestCameraControl = requestCameraControl;
+
         import {start} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.start = start;
      </script>
@@ -66,7 +69,10 @@
 
     <div id="right-dash">
 
-        <input type="checkbox" id="needControl">
+        <input id="controlButton" type="button" value="Request Control" onclick="window.requestCameraControl()"></input>
+
+
+        <div id="needControl">
 
             <div id="xyzcoord">
                 <b id="xyzcoordtext">XYZ Coords: (Static)</b>
@@ -113,8 +119,7 @@
                 <div class="space"></div>
             </div>
 
-        </input>
-
+        </div>
     </div>
     
     <script type="text/javascript">

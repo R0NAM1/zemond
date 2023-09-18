@@ -50,8 +50,7 @@ height: 100vh;
 #xyzcoord {
     border: 1px solid black; 	/* Adding a border to distinguish the element */
     padding: 10px;     /* Adding some padding for text */
-    opacity: 0.6;/* By default non-interactable, is removed when PTZ COORD is updated  */
-    pointer-events: none;
+  
 }
 
 .joystick {
@@ -189,8 +188,6 @@ height: 100vh;
 border: 1px solid black; 	/* Adding a border to distinguish the element */
 padding: 10px;     /* Adding some padding for text */
 position: relative;
-opacity: 0.6;/* By default non-interactable, is removed when we get a truetwa from webrtc */
-pointer-events: none;
 }
 
 .microphonetogglebutton {
@@ -219,10 +216,13 @@ pointer-events: none;
     border: 1px solid black; 	/* Adding a border to distinguish the element */
     padding: 10px;     /* Adding some padding for text */
     position: relative;
+    opacity: 0.6;
+    pointer-events: none;
+}
 
-    /* opacity: 0.6;
-    pointer-events: none; */
-
+#controlButton {
+    opacity: 0.6;
+    pointer-events: none;
 }
 
 .needMicModal {

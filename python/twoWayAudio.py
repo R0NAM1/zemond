@@ -1,4 +1,4 @@
-import socket, sys, cryptocode, hashlib, re, threading, time, websockets, subprocess, asyncio, wave, os
+import socket, sys, cryptocode, hashlib, re, threading, time, websockets, subprocess, asyncio, wave, os, signal
 from SimpleWebSocketServer import WebSocket
 from io import BytesIO
 from aiortc.contrib.media import MediaRelay
@@ -279,42 +279,44 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
             "-f", "rtp",
             "rtp://{0}:{1}?localrtpport=14368&localrtcpport=14369'".format(cameraIP, remotePortsExtract2[0])
         ])
+                        
+        async def updateAudioBufferLoop():
+            try:
+                doOnce = False;
+                while True:
+                    try:
+                        audioFrame = await audioTrack.recv()
+                        if audioFrame is None:
+                            print("NO AUDIO")
+                            break
+                        # Grab latest audioframe, stuff into buffer and write to process stdin
+                        frontBuffer = (audioFrame.to_ndarray().tobytes())
+                        process.stdin.write(frontBuffer)
+                        # if doOnce == False:
+                        #     print("Wrote first buffer to ffmpeg")
+                        #     doOnce = True
+                    except Exception as e:
+                        print("Error In Retrieving WebRTC Incoming Audio Data, exception follows: " + str(e))
+                        process.stdin.close()
+                        await process.wait()
+                        
+            except asyncio.CancelledError:
+                # print('updateBufferLoop cancelled, kill process')
+                # print("Send SIGINT to ffmpeg")
+                process.send_signal(signal.SIGINT)                    
+                process.stdin.close()
                 
         process = await asyncio.create_subprocess_exec(*command.split(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        
-        async def updateAudioBufferLoop():
-            doOnce = False;
-            while True:
-                try:
-                    audioFrame = await audioTrack.recv()
-                    if audioFrame is None:
-                        print("NO AUDIO")
-                        break
-                    # Grab latest audioframe, stuff into buffer and write to process stdin
-                    frontBuffer = (audioFrame.to_ndarray().tobytes())
-                    process.stdin.write(frontBuffer)
-                    # if doOnce == False:
-                    #     print("Wrote first buffer to ffmpeg")
-                    #     doOnce = True
-                except Exception as e:
-                    print("Error In Retrieving WebRTC Incoming Audio Data, exception follows: " + str(e))
-                    process.stdin.close()
-                    await process.wait()
-        
-        update_task = asyncio.create_task(updateAudioBufferLoop())
-        stdout, stderr = await process.communicate()
 
-        # # # Print any output from FFmpeg
-        if stdout:
-            print(stdout.decode())
-        if stderr:
-            print(stderr.decode())
-            
+        update_task = asyncio.create_task(updateAudioBufferLoop())
+        
+        # Keep task running
+        await process.wait()
+
     except asyncio.CancelledError:
         # print("Should Be Cancelled")
         update_task.cancel()
-        process.stdin.close()
-        await process.wait()
+        await update_task
         # print("Process Closed")
         raise    
         

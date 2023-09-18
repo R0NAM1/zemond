@@ -459,9 +459,8 @@ def cameraModels():
         myCursor.execute("UPDATE cameradb SET image=(%s) WHERE model = '{0}'".format(selectedModel), (imageb64, ))
         myDatabase.commit()
 
-    myCursor.execute("Select * from cameradb")
+    myCursor.execute("Select * from cameradb;")
     cameradb = myCursor.fetchall()
-    allCameraModels = ''.join(str(cameradb))
     return render_template('camera_models.html', data=cameradb, commit_id=commit_id, release_id=release_id)
 
 # Return Favicon
@@ -613,139 +612,179 @@ def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
 
 # Initializes objects and connections we need.
 async def webRtcStart(thisUUID, dockerIP, cameraName):
+    try:
+        # Pingtime holds the UUID and the current ping time (Time since last ping pong message from client, if over 5 seconds or so get rid of)
+        global userUUIDAssociations
+            
+        # Set Media Source and decode offered data
+        # Media source being local docker container and regular video frames
+        player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1")
+        params = ast.literal_eval((request.data).decode("UTF-8"))
 
-    # Pingtime holds the UUID and the current ping time (Time since last ping pong message from client, if over 5 seconds or so get rid of)
-    global userUUIDAssociations
+        # Set ICE Server to local server, hardcoded to be NVR, change at install!
+        offer = RTCSessionDescription(sdp=params.get("sdp"), type=params.get("type"))
+        webRtcPeer = RTCPeerConnection(configuration=RTCConfiguration(
+        iceServers=[RTCIceServer(
+            urls=['stun:nvr.internal.my.domain'])]))
+
+        # We need to see if the camera supports PTZ, if it does prepare to send COORDS
+        # Select all info about current cam
+        myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+        camtuple = myCursor.fetchall()
+        camdata = camtuple[0]
         
-    # Set Media Source and decode offered data
-    # Media source being local docker container and regular video frames
-    player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1")
-    params = ast.literal_eval((request.data).decode("UTF-8"))
+        # Currently passing through the raw DB query.
+        cameraModel = camdata[7]
+        ptzcoords = {}
+        myCursor.execute("Select hasptz, hastwa from cameradb where model = '{0}' ".format(cameraModel))
+        hasEXTTuple = myCursor.fetchall()
+        
+        hasPTZ = hasEXTTuple[0][0]
+        hasTWA = hasEXTTuple[0][1]    
 
-    # Set ICE Server to local server, hardcoded to be NVR, change at install!
-    offer = RTCSessionDescription(sdp=params.get("sdp"), type=params.get("type"))
-    webRtcPeer = RTCPeerConnection(configuration=RTCConfiguration(
-    iceServers=[RTCIceServer(
-        urls=['stun:nvr.internal.my.domain'])]))
+        # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
+        @webRtcPeer.on("datachannel")
+        def on_datachannel(channel):
+            if (hasPTZ == True):
+                ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
+                update_task = asyncio.create_task(updatePTZReadOut(webRtcPeer, cameraName, channel))  
 
-    # We need to see if the camera supports PTZ, if it does prepare to send COORDS
-    # Select all info about current cam
-    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-    camtuple = myCursor.fetchall()
-    camdata = camtuple[0]
+            if (hasTWA == True):
+                channel.send("truetwa") # Allows Remote TWA Toggle to be clicked
+
+            tmpCamTuple = False
+
+            @channel.on("message")
+            async def on_message(message):
+                global userUUIDAssociations
+                if isinstance(message, str) and message.startswith("ping"):
+                    userUUIDAssociations[thisUUID][1] = time.time()
+                    channel.send("pong" + message[4:])
+                elif (message.startswith("up:")):
+                    msgSpeed = message.split(":")[1] 
+                    sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed, tmpCamTuple)
+
+                elif (message.startswith("down:")):
+                    msgSpeed = message.split(":")[1] 
+                    sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed, tmpCamTuple)
+
+                elif message.startswith("left:"):
+                    msgSpeed = message.split(":")[1] 
+                    sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed, tmpCamTuple)
+
+                elif (message.startswith("right:")):
+                    msgSpeed = message.split(":")[1]
+                    sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed, tmpCamTuple)
+
+                elif (message.startswith("positive:")):
+                    msgSpeed = message.split(":")[1]
+                    sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed, tmpCamTuple)
+
+                elif (message.startswith("negative:")):
+                    msgSpeed = message.split(":")[1]
+                    sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed, tmpCamTuple)
+
+                elif (message == "stop"):
+                    sendAuthenticatedPTZContMov(cameraName, "stop", 0, tmpCamTuple)
+                    
+                elif (message == "truetwa"):                
+                    # Get DB Details to plug in below
+                    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
+                    camtuple = myCursor.fetchall()
+                    camdata = camtuple[0]
+                    
+                    # Get IP, port and slashaddress
+
+                    cameraIP1 = camdata[2].split("//")
+                    cameraIP2 = cameraIP1[1].split("/")
+                    cameraIP3 = cameraIP2[0].split(":")
+                                                    
+                    port1 = cameraIP1[1].split(":")
+                    port2 = port1[1].split("/", 1)
+                    port3 = port2[0]
+                    
+                    slashAddress = port2[1]
+                    
+                    # Now send to remote via threading.
+                    microphoneStreamFuture = asyncio.create_task(
+                    streamBufferToRemote(camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), cameraIP3[0], int(port3), slashAddress, webRtcPeer)
+                    )
+                    # Add instance to uuid
+                    userUUIDAssociations[thisUUID].append(microphoneStreamFuture) # Appended to 5
+                    
+                elif (message == "falsetwa"):
+                    # print("Cancel Microphone Task")
+                    userUUIDAssociations[thisUUID][5].cancel()
+                    await asyncio.sleep(0)
+                    del userUUIDAssociations[thisUUID][5]
+                    
+                elif (message == "requestCameraControl"):
+                    amITheImposter = False
+                    anyCamUsing = False
+                    # If user wants camrea control, check userUUIDAssociations[thisUUID][3]
+                    # for any cameras with this name, and if [3] is true
+                    # IF I get another requestCameraControl, assume its a toggle and check if I'm true!
+                    currentCam = userUUIDAssociations[thisUUID][4]
+                    
+                    # First check if I'M currently using the camera
+                    if (userUUIDAssociations[thisUUID][3] == True):
+                        # I AM USING THE CAM! User wants to relenquish control then.
+                        # Send command controlbreak
+                        channel.send("controlbreak")
+                        # Nobodys using now
+                        userUUIDAssociations[thisUUID][3] = False
+                        amITheImposter = True
+                    
+                    if (amITheImposter == False):
+                        # So we don't set our control to false then itterate on it thinking nobody had it
+                        
+                        for uuid in userUUIDAssociations:
+                            # print(userUUIDAssociations[uuid][4])
+                            # If the current UUID is using same cam as me, check.
+                            if userUUIDAssociations[uuid][4] == currentCam:
+                                # If they are using the camera, say so    
+                                if userUUIDAssociations[uuid][3] == True:
+                                    anyCamUsing = True
+                    
+                        #After For loop, all uuids checked
+                        # If no user is using the camera
+                        if (anyCamUsing == False):
+                            # Not using, I will!
+                            channel.send("controlallow")
+                            # Set all to know I'm controlling
+                            userUUIDAssociations[thisUUID][3] = True
+                        elif (anyCamUsing == True):
+                            # Is being used, control deny
+                            channel.send("controldeny")
+                    
+                elif ():
+                    # print("Closing Peer!")
+                    webRtcPeer.close()
+
+        if (player.video):
+            webRtcPeer.addTrack(player.video)
+        if (player.audio):
+            webRtcPeer.addTrack(player.audio)
     
-    # Currently passing through the raw DB query.
-    cameraModel = camdata[7]
-    ptzcoords = {}
-    myCursor.execute("Select hasptz, hastwa from cameradb where model = '{0}' ".format(cameraModel))
-    hasEXTTuple = myCursor.fetchall()
-    
-    hasPTZ = hasEXTTuple[0][0]
-    hasTWA = hasEXTTuple[0][1]    
 
-    # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
-    @webRtcPeer.on("datachannel")
-    def on_datachannel(channel):
-        if (hasPTZ == True):
-            ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
-            update_task = asyncio.create_task(updatePTZReadOut(webRtcPeer, cameraName, channel))  
+        # Wait to Set Remote Description
+        await webRtcPeer.setRemoteDescription(offer)
 
-        if (hasTWA == True):
-            channel.send("truetwa") # Allows Remote TWA Toggle to be clicked
+        # Generate Answer to Give To Peer
+        answer = await webRtcPeer.createAnswer()
+        
+        # Set Description of Peer to answer.
+        await webRtcPeer.setLocalDescription(answer)
 
-        tmpCamTuple = False
+        final = ("{0}").format(json.dumps(
+                {"sdp": (webRtcPeer.localDescription.sdp), "type": webRtcPeer.localDescription.type}
+            ))
 
-        @channel.on("message")
-        async def on_message(message):
-            global userUUIDAssociations
-            if isinstance(message, str) and message.startswith("ping"):
-                userUUIDAssociations[thisUUID][1] = time.time()
-                channel.send("pong" + message[4:])
-            elif (message.startswith("up:")):
-                msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed, tmpCamTuple)
-
-            elif (message.startswith("down:")):
-                msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed, tmpCamTuple)
-
-            elif message.startswith("left:"):
-                msgSpeed = message.split(":")[1] 
-                sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed, tmpCamTuple)
-
-            elif (message.startswith("right:")):
-                msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed, tmpCamTuple)
-
-            elif (message.startswith("positive:")):
-                msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed, tmpCamTuple)
-
-            elif (message.startswith("negative:")):
-                msgSpeed = message.split(":")[1]
-                sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed, tmpCamTuple)
-
-            elif (message == "stop"):
-                sendAuthenticatedPTZContMov(cameraName, "stop", 0, tmpCamTuple)
-                
-            elif (message == "truetwa"):                
-                # Get DB Details to plug in below
-                myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-                camtuple = myCursor.fetchall()
-                camdata = camtuple[0]
-                
-                # Get IP, port and slashaddress
-
-                cameraIP1 = camdata[2].split("//")
-                cameraIP2 = cameraIP1[1].split("/")
-                cameraIP3 = cameraIP2[0].split(":")
-                                                
-                port1 = cameraIP1[1].split(":")
-                port2 = port1[1].split("/", 1)
-                port3 = port2[0]
-                
-                slashAddress = port2[1]
-                
-                # Now send to remote via threading.
-                microphoneStreamFuture = asyncio.create_task(
-                streamBufferToRemote(camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), cameraIP3[0], int(port3), slashAddress, webRtcPeer)
-                )
-                # Add instance to uuid
-                userUUIDAssociations[thisUUID].append(microphoneStreamFuture) # Appended to 4
-                
-            elif (message == "falsetwa"):
-                # print(userUUIDAssociations[thisUUID][4])
-                userUUIDAssociations[thisUUID][4].cancel()
-                await asyncio.sleep(5)
-                # print(userUUIDAssociations[thisUUID][4])
-                del userUUIDAssociations[thisUUID][4]
-                
-            elif ():
-                # print("Closing Peer!")
-                webRtcPeer.close()
-
-    if (player.video):
-        webRtcPeer.addTrack(player.video)
-    if (player.audio):
-        webRtcPeer.addTrack(player.audio)
-   
-
-    # Wait to Set Remote Description
-    await webRtcPeer.setRemoteDescription(offer)
-
-    # Generate Answer to Give To Peer
-    answer = await webRtcPeer.createAnswer()
-    
-    # Set Description of Peer to answer.
-    await webRtcPeer.setLocalDescription(answer)
-
-    final = ("{0}").format(json.dumps(
-            {"sdp": (webRtcPeer.localDescription.sdp), "type": webRtcPeer.localDescription.type}
-        ))
-
-    # Retirn response
-    return final
-
+        # Retirn response
+        return final
+    except asyncio.CancelledError:
+        update_task.cancel()
+        
 # When we grab a WebRTC offer from out browser client.
 @app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
@@ -774,8 +813,8 @@ def webRTCOFFER(cam):
     # Now create a timer that is reset by Ping-Pong.
 
     # Add generated info to userUUIDAssociation
-    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], microphoneStreamFuture[4] (4 appended)
-    userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False]
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
+    userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, cam]
 
     
     # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
