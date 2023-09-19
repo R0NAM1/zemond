@@ -75,6 +75,53 @@ async function gamepadLoopCheck() {
             //     console.log("Axis " + i + ": value = " + axis);
             //   }
 
+function arrowKeyCheckAddListeners() {
+
+    document.addEventListener('keyup', (event) => {
+
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === '+' || event.key === '-') {
+            gpButton = false;
+            sendPtzMessage('stop')
+        }
+
+    })
+
+    document.addEventListener('keydown', (event) => {
+     
+        if (hasPTZ && hasCameraControl) {
+
+            if(gpButton == false) {
+
+                if (event.key === 'ArrowUp') {
+                    sendPtzMessage('up', speedSlider.value)
+                    gpButton = true;
+                }
+                else if (event.key === 'ArrowDown') {
+                    sendPtzMessage('down', speedSlider.value)
+                    gpButton = true;
+                }
+                if (event.key === 'ArrowLeft') {
+                    sendPtzMessage('left', speedSlider.value)
+                    gpButton = true;
+                }
+                if (event.key === 'ArrowRight') {
+                    sendPtzMessage('right', speedSlider.value)
+                    gpButton = true;
+                }
+                if (event.key === '+') {
+                    sendPtzMessage('positive', speedSlider.value)
+                    gpButton = true;
+                }
+                if (event.key === '-') {
+                    sendPtzMessage('negative', speedSlider.value)
+                    gpButton = true;
+                }
+        }
+    }})
+
+
+}
+
 
 // This Function runs asycnronously, calls adapter.js to get the browser type and version, then creates an offer based on some
 // config to send to the server.
@@ -329,6 +376,11 @@ export async function start() {
 
     document.getElementById('needMicModal').style.display = 'none';
 
+    // Make video element pan and zoomable
+    // var videoElement = document.getElementById('video')
+    // window.panzoom(videoElement);
+    // Works, but videoplayer needs to mature enough to be fancy with it
+
 
    // For fun, if a gamepad is detected, allow it to control the PTZ controls, but need to check if allowed from server.
    window.addEventListener('gamepadconnected', function(event) {
@@ -336,6 +388,8 @@ export async function start() {
     console.log('Gamepad connected: ' + gamepad.id);
     setInterval(gamepadLoopCheck, 100);
     });
+
+    arrowKeyCheckAddListeners()
 
    // Put Mic into MediaStream
    try {
@@ -349,6 +403,7 @@ export async function start() {
         myMediaStreamSource.connect(myMediaStreamDestination)
 
         outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
+        hasMicControl = true;
    
         startWebRtc(outputStream)
     }

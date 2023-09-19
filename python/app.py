@@ -9,6 +9,8 @@ from threading import Thread, active_count
 from git import Repo
 from waitress import serve # Production server
 
+# COMMENT TO SEE FFMPEG OUTPUT, OR ADD TRACE
+os.environ['AV_LOG_LEVEL'] = 'quiet'
 # WebRTC
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCDataChannel
 from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaBlackhole
@@ -618,8 +620,10 @@ async def webRtcStart(thisUUID, dockerIP, cameraName):
             
         # Set Media Source and decode offered data
         # Media source being local docker container and regular video frames
+        
         player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1")
         params = ast.literal_eval((request.data).decode("UTF-8"))
+
 
         # Set ICE Server to local server, hardcoded to be NVR, change at install!
         offer = RTCSessionDescription(sdp=params.get("sdp"), type=params.get("type"))

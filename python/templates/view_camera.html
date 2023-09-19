@@ -38,6 +38,10 @@
 
         import {start} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.start = start;
+
+        import "{{url_for('static', filename='node_modules/panzoom/dist/panzoom.js')}}";
+        window.panzoom = panzoom;
+
      </script>
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>
