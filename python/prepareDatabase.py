@@ -69,17 +69,19 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS cameraEvents (
 
 print("Making credentials Table Now")
 
-# Create Table credentials With Data
-cursor.execute("""CREATE TABLE IF NOT EXISTS credentials (
-   groupname VARCHAR(50) ,
-   username VARCHAR(50) ,
-   password VARCHAR(5000));""")
-
 # Create User Table
 cursor.execute("""CREATE TABLE IF NOT EXISTS userTable (
    username VARCHAR(50),
    password VARCHAR(5000),
-   permissions ARRAY;""")
+   permissions VARCHAR[],
+   camPermissions VARCHAR[]);""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS auditLog (
+   timeLogged TIMESTAMP,
+   username VARCHAR(50),
+   auditLogLevel varchar(50),
+   auditMessage varchar (500)
+   );""")
 
 # Commit Changes To Database
 myDatabase.commit()

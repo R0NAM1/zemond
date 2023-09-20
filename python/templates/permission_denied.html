@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+    <h1>It appears that you don't have the correct permissions to access that resource.</h1>
+    <h1> Permission Reqiured: {{ permissionString }} </h1>
+{% endblock %}

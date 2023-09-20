@@ -74,7 +74,7 @@ def dockerWatcher():
         print("Couldn't find a PiD File For Docker! Is it running...?")
 
     while True:
-        print("Checking If All Proper Containers Are Running...")
+        # print("Checking If All Proper Containers Are Running...")
 
         # Go through each entry in the DB and make sure the corosponding container is running
         myCursor.execute("Select name, dockerIP from localcameras")
@@ -114,13 +114,14 @@ def dockerWatcher():
                 container_state = iContainer.attrs['State']
 
                 if container_state['Status'] == 'running':
-                    print(cameraNameHash + " is Running! Checking if IP Matches database record...")
+                    # print(cameraNameHash + " is Running! Checking if IP Matches database record...")
                     # Now check if IP matches
                     if ((iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress']) == cameraDBIP):
-                        print("Camera DB and IP Match, nothing to do! \n \n")
+                        # print("Camera DB and IP Match, nothing to do! \n \n")
+                        pass
                     else:
                         containerIP = (iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress'])
-                        print("Did Not Match: DBIP:" + cameraDBIP + ": UPDATE dockerIP ON DATABASE TO: " + str(containerIP))
+                        # print("Did Not Match: DBIP:" + cameraDBIP + ": UPDATE dockerIP ON DATABASE TO: " + str(containerIP))
                         myCursor.execute("UPDATE localcameras SET dockerIP='{0}' WHERE name = '{1}'".format(containerIP, camera))
                         myDatabase.commit()
                 else:

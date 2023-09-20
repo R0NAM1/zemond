@@ -23,7 +23,7 @@ from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRe
 from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely, firstRunDockerCheck
 from ptzHandler import readPTZCoords, sendContMovCommand
 from twoWayAudio import streamBufferToRemote
-from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword
+from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
@@ -91,21 +91,27 @@ def login():
     error = None
     if request.method == 'POST':
         inputtedUsername = request.form['username']
-        # Check if username exists in database
-        if verifyUserPassword(inputtedUsername, request.form['password']):
-            localUserObject = User(inputtedUsername)
-            # Register user with flask session by passing in username as string, and it makes it a user object same character set as string
-            # "user" --> user (as instance of User())
-            login_user(localUserObject)
-            # Set logged_in to true so can access any page
-            session['logged_in'] = True
-            session.pop('_flashes', None)
-            flash('Your logged in!')
-            return redirect(url_for('index'))
-        
+        if (auditUser(inputtedUsername, "permissionRoot.userSettings.accountActive")):
+            # Check if username exists in database
+            # DO HERE incase somebody is bruteforcing logins with different names, real or not.
+            if verifyUserPassword(inputtedUsername, request.form['password']):
+                
+                                
+                localUserObject = User(inputtedUsername)
+                # Register user with flask session by passing in username as string, and it makes it a user object same character set as string
+                # "user" --> user (as instance of User())
+                login_user(localUserObject)
+                # Set logged_in to true so can access any page
+                session['logged_in'] = True
+                session.pop('_flashes', None)
+                flash('Your logged in!')
+                return redirect(url_for('index'))
+            else:
+                session.pop('_flashes', None)
+                flash('Username or Password is incorrect!')
         else:
             session.pop('_flashes', None)
-            flash('Username or Password is incorrect!')
+            flash('Account Inactive')
     return render_template('login.html', error=error, commit_id=commit_id, release_id=release_id)
 
 @app.route('/logout/')
@@ -119,27 +125,37 @@ def logout():
 @login_required
 def dashboard():
     session.pop('_flashes', None)
-    # Return general stats, num cameras online, offline, usersloggedin,
-    # Grab total number of cameras from database
-    myCursor.execute("Select name from localcameras;")
-    localcameras = myCursor.fetchall()
-    totalCamNum = len(localcameras)
-    offlineCamNum = (totalCamNum - onlineCameraCache)
-    # print(str(login_manager._login_disabled))
-    return render_template('dashboard.html', camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
+    # Permission Check Dashboard
+    if (auditUser(current_user.username, "permissionRoot.dashboard")):
+        # Return general stats, num cameras online, offline, usersloggedin,
+        # Grab total number of cameras from database
+        myCursor.execute("Select name from localcameras;")
+        localcameras = myCursor.fetchall()
+        totalCamNum = len(localcameras)
+        offlineCamNum = (totalCamNum - onlineCameraCache)
+        # print(str(login_manager._login_disabled))
+        return render_template('dashboard.html', camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.dashboard", commit_id=commit_id, release_id=release_id)
 
 @app.route('/monitors/')
 @login_required
 def monitors():
     session.pop('_flashes', None)
-    return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    if (auditUser(current_user.username, "permissionRoot.monitors")):
+        return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
 
 @app.route('/search/')
 @login_required
 def search():
     session.pop('_flashes', None)
-    return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    if (auditUser(current_user.username, "permissionRoot.search")):    
+        return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.search", commit_id=commit_id, release_id=release_id)
 # Will allow looking back at all available footage currently written to disk from the time called, lists date and time footage starts,
 # allow selecting, highlighting, bookmarking, and exporting snapshots and mp4's. Will probably change how footage is wrote from mp4's
 # to .ts livestream chunks and try to embed current system time into it. 
@@ -148,106 +164,109 @@ def search():
 @login_required
 def cameraList():
     session.pop('_flashes', None)
-    global snapshotCache
-    
-    # Get all added cameras, put into tupple.
-    myCursor.execute("Select * from localcameras ORDER BY name ASC")
-    localcameras = myCursor.fetchall()
-    
-    # Get camera model details, and reference pic.
-    myCursor.execute("Select * from cameradb")
-    cameradb = myCursor.fetchall()
-
-    # Data structure to send: Snapshot, Camera Name, Model & Serial, Camera Image
-
-    # To process: Get All From Local Cameras, associate with model number, using that 'add' data to the tuple
-    dataToSend = None;
-    
-    # For every camera pulled, add it to the table we send to the client.
-    for row in localcameras:
-        # Get Current Name
-        currentiname = row[0]
-
-        # Create httpurl
-        httpurl = row[1]
-        httpurl = httpurl.replace("/onvif/device_service", "")
+    if (auditUser(current_user.username, "permissionRoot.camera_list")):   
+        global snapshotCache
         
-        # Parse Snapshot Cache and get correct image in Iteration
-        iterativeSnapshot = snapshotCache.get(currentiname)
+        # Get all added cameras, put into tupple.
+        myCursor.execute("Select * from localcameras ORDER BY name ASC")
+        localcameras = myCursor.fetchall()
         
-        # Get Name's Model Number
-        myCursor.execute("Select model from localcameras where name='{0}'".format(currentiname))
-        currentimodel = myCursor.fetchone()
-        currentimodelString = ''.join(currentimodel)
+        # Get camera model details, and reference pic.
+        myCursor.execute("Select * from cameradb")
+        cameradb = myCursor.fetchall()
         
-        # Get Image From Model Number
-        myCursor.execute("Select image from cameradb where model='{0}'".format(currentimodelString))
-        imageToLoad = myCursor.fetchone()
-        imageToLoadString = ''.join(imageToLoad)
+        # Get all cameras user is allowed to access
+        myCursor.execute("Select camPermissions from userTable WHERE username='{0}'".format(current_user.username))
+        camPerms = myCursor.fetchall()
+        camPermsSplit = camPerms[0][0]
 
-        # Create Info String For Manufacturer Model
+        # Data structure to send: Snapshot, Camera Name, Model & Serial, Camera Image
 
-         # Get Name's Manufacturer
-        myCursor.execute("Select manufacturer from cameradb where model='{0}'".format(currentimodelString))
-        currentimanufacturer = myCursor.fetchone()
-        currentimanufacturerString = ''.join(currentimanufacturer)
+        # To process: Get All From Local Cameras, associate with model number, using that 'add' data to the tuple
+        dataToSend = None;
+        sendCameraList = []
+                
+        # First check if user can access it
+        for row in localcameras:
+            try:
+                for cam in camPermsSplit:
+                    if cam == row[0]:
+                        # print("Matches")
+                        sendCameraList.append(row)
+                        break
+                    else:
+                        # print("Does not match: " + str(row))
+                        isMatch = False
+            except Exception as e:
+                print("No Camera Permissions Found! " + str(e))    
+                pass
+            
+        # For every camera pulled, add it to the table we send to the client.
+        for row in sendCameraList:
+            
+            # Get Current Name
+            currentiname = row[0]
 
-        manmod = currentimanufacturerString + " " + currentimodelString
+            # Create httpurl
+            httpurl = row[1]
+            httpurl = httpurl.replace("/onvif/device_service", "")
+            
+            # Parse Snapshot Cache and get correct image in Iteration
+            iterativeSnapshot = snapshotCache.get(currentiname)
+            
+            # Get Name's Model Number
+            myCursor.execute("Select model from localcameras where name='{0}'".format(currentiname))
+            currentimodel = myCursor.fetchone()
+            currentimodelString = ''.join(currentimodel)
+            
+            # Get Image From Model Number
+            myCursor.execute("Select image from cameradb where model='{0}'".format(currentimodelString))
+            imageToLoad = myCursor.fetchone()
+            imageToLoadString = ''.join(imageToLoad)
 
-        # Can't Have Spaces In A URL, So Quickly Parse That.
-        parsedName = str(row[0]).replace(" ","%20") 
+            # Create Info String For Manufacturer Model
 
-        # If data is empty add data, if not then append.
+            # Get Name's Manufacturer
+            myCursor.execute("Select manufacturer from cameradb where model='{0}'".format(currentimodelString))
+            currentimanufacturer = myCursor.fetchone()
+            currentimanufacturerString = ''.join(currentimanufacturer)
+
+            manmod = currentimanufacturerString + " " + currentimodelString
+
+            # Can't Have Spaces In A URL, So Quickly Parse That.
+            parsedName = str(row[0]).replace(" ","%20") 
+
+            # If data is empty add data, if not then append.
+            if dataToSend == None:
+                dataToSend = ((iterativeSnapshot, row[0], manmod, imageToLoadString, httpurl, parsedName), )
+            else:
+                rawData = ((iterativeSnapshot, row[0], manmod, imageToLoadString, httpurl, parsedName), )
+                dataToSend = (dataToSend) + (rawData)
+
+        # dataToSend = (("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"), ("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"))
         if dataToSend == None:
-            dataToSend = ((iterativeSnapshot, row[0], manmod, imageToLoadString, httpurl, parsedName), )
-        else:
-            rawData = ((iterativeSnapshot, row[0], manmod, imageToLoadString, httpurl, parsedName), )
-            dataToSend = (dataToSend) + (rawData)
-
-    # dataToSend = (("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"), ("Snapshot", "Name", "Model + Serial", "Camera Image", "httpurl"))
-    if dataToSend == None:
-        dataToSend = (("", "No Camera's Added!", "", "", "", ""), )
-        
-    return render_template('cameralist.html', data=dataToSend, commit_id=commit_id, release_id=release_id)
+            dataToSend = (("", "No Camera's Added!", "", "", "", ""), )
+            
+        return render_template('cameralist.html', data=dataToSend, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.camera_list", commit_id=commit_id, release_id=release_id)
 
 @app.route('/settings/')
 @login_required
 def settings():
     session.pop('_flashes', None)
-    return render_template('settings.html', commit_id=commit_id, release_id=release_id)
+    if (auditUser(current_user.username, "permissionRoot.settings")):   
+        return render_template('settings.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings", commit_id=commit_id, release_id=release_id)
 
 # When adding a user manually, do it here
 @app.route('/settings/add_user/', methods=['GET', 'POST'])
 @login_required
 def addUser():
     session.pop('_flashes', None)
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if not username:
-            session.pop('_flashes', None)
-            flash('Username is required!')
-        elif not password:
-            session.pop('_flashes', None)
-            flash('Password is required!')
-        else:
-            didGetUser = createUser(username, password)
-            if didGetUser:
-                session.pop('_flashes', None)
-                flash('User created!')
-            elif not didGetUser:
-                session.pop('_flashes', None)
-                reset_pass_link = Markup('<a href="' + url_for('resetPassword') + '">reset password instead?</a>')
-                flash('User exists, ' + reset_pass_link)
-
-    return render_template('add_user.html', commit_id=commit_id, release_id=release_id)
-
-# If a user needs a password reset
-@app.route('/settings/reset_password/', methods=['GET', 'POST'])
-@login_required
-def resetPassword():
-    session.pop('_flashes', None)
-    if request.method == 'POST':
+    if (auditUser(current_user.username, "permissionRoot.settings.add_user")):   
+        if request.method == 'POST':
             username = request.form['username']
             password = request.form['password']
             if not username:
@@ -257,61 +276,95 @@ def resetPassword():
                 session.pop('_flashes', None)
                 flash('Password is required!')
             else:
-                # Check if user exists... if so 
-                userExists = verifyDbUser(username)
-                if userExists:
-                    # Privlige check, auditUser.userPassword.reset(username) Get True Or False based on if has privledge
-                    # Implement eventually
-                    resetUserPass(username, password)
+                didGetUser = createUser(username, password)
+                if didGetUser:
                     session.pop('_flashes', None)
-                    flash('User password reset.')
-                else:
+                    flash('User created!')
+                elif not didGetUser:
                     session.pop('_flashes', None)
-                    flash('User does not exist.')
+                    reset_pass_link = Markup('<a href="' + url_for('resetPassword') + '">reset password instead?</a>')
+                    flash('User exists, ' + reset_pass_link)
 
-    return render_template('reset_password.html', commit_id=commit_id, release_id=release_id)
+        return render_template('add_user.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.add_user", commit_id=commit_id, release_id=release_id)
+
+# If a user needs a password reset
+@app.route('/settings/reset_password/', methods=['GET', 'POST'])
+@login_required
+def resetPassword():
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.settings.reset_password")):   
+        if request.method == 'POST':
+                username = request.form['username']
+                password = request.form['password']
+                if not username:
+                    session.pop('_flashes', None)
+                    flash('Username is required!')
+                elif not password:
+                    session.pop('_flashes', None)
+                    flash('Password is required!')
+                else:
+                    # Check if user exists... if so 
+                    userExists = verifyDbUser(username)
+                    if userExists:
+                        # Privlige check, auditUser.userPassword.reset(username) Get True Or False based on if has privledge
+                        # Implement eventually
+                        resetUserPass(username, password)
+                        session.pop('_flashes', None)
+                        flash('User password reset.')
+                    else:
+                        session.pop('_flashes', None)
+                        flash('User does not exist.')
+
+        return render_template('reset_password.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.reset_password", commit_id=commit_id, release_id=release_id)
 
 # User delete requested, route here
 @app.route('/settings/delete_user/', methods=['GET', 'POST'])
 @login_required
 def deleteUser():
     session.pop('_flashes', None)
-    sessionUsername = current_user.username
-    if request.method == 'POST':
-        postpassword = request.form['postpassword']
-        # Get User Password, verify user, verify permissions, delete user.
-        #audit
+    if (auditUser(current_user.username, "permissionRoot.settings.delete_user")):   
+        sessionUsername = current_user.username
+        if request.method == 'POST':
+            postpassword = request.form['postpassword']
+            # Get User Password, verify user, verify permissions, delete user.
+            #audit
+            
+            myCursor.execute("Select password from userTable WHERE username='{0}'".format(sessionUsername))
+            dbPass = myCursor.fetchone()
+            currentDbPass = ''.join(dbPass)
+            # Originally wanted to hash submitted password and check if it matches with what's in DB,
+            # but cryptocode generates a different Hash :/
+            # Now I just decrypt the DB entry and compare.
         
-        myCursor.execute("Select password from userTable WHERE username='{0}'".format(sessionUsername))
-        dbPass = myCursor.fetchone()
-        currentDbPass = ''.join(dbPass)
-        # Originally wanted to hash submitted password and check if it matches with what's in DB,
-        # but cryptocode generates a different Hash :/
-        # Now I just decrypt the DB entry and compare.
-    
-        if postpassword == cryptocode.decrypt(str(currentDbPass), passwordRandomKey):
-            # User entered password, now verify del user exists and del
-            if verifyUserPassword(current_user.username, postpassword):
-                # Now delete the DB entry of the cameraName
-                myCursor.execute("DELETE FROM userTable where username='{0}'".format(sessionUsername))
-                myDatabase.commit()
+            if postpassword == cryptocode.decrypt(str(currentDbPass), passwordRandomKey):
+                # User entered password, now verify del user exists and del
+                if verifyUserPassword(current_user.username, postpassword):
+                    # Now delete the DB entry of the cameraName
+                    myCursor.execute("DELETE FROM userTable where username='{0}'".format(sessionUsername))
+                    myDatabase.commit()
 
 
-    # Get all camera's
-    myCursor.execute("Select name from localcameras")
-    camnames = myCursor.fetchall()
+        # Get all camera's
+        myCursor.execute("Select name from localcameras")
+        camnames = myCursor.fetchall()
 
-    # Generate user list from userTable
-    myCursor.execute("Select username from userTable;")
-    dbList = myCursor.fetchall()
-    
-    userList = []
-    
-    for user in dbList:
-        if user[0] != sessionUsername:
-            userList.append(user[0])
+        # Generate user list from userTable
+        myCursor.execute("Select username from userTable;")
+        dbList = myCursor.fetchall()
         
-    return render_template('delete_user.html', userList=userList, commit_id=commit_id, release_id=release_id)  
+        userList = []
+        
+        for user in dbList:
+            if user[0] != sessionUsername:
+                userList.append(user[0])
+            
+        return render_template('delete_user.html', userList=userList, commit_id=commit_id, release_id=release_id)  
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.delete_user", commit_id=commit_id, release_id=release_id)
 
 
 # This one is automatic
@@ -319,151 +372,160 @@ def deleteUser():
 @login_required
 def addCamera():
     session.pop('_flashes', None)
-    if request.method == 'POST':
-        cameraname = request.form['cameraname']
-        onvifURL = request.form['onvifURL']
-        username = request.form['username']
-        password = request.form['password']
-        if not onvifURL:
-            session.pop('_flashes', None)
-            flash('ONVIF URL is required!')
-        elif not username:
-            session.pop('_flashes', None)
-            flash('Username is required!')
-        elif not password:
-            session.pop('_flashes', None)
-            flash('Password is required!')
-        else:
-            # Quick check to see if camera already exists in DB
-            doesCameraNameExist = myCursor.execute("Select Name from localcameras Where name = '{0}'".format(cameraname))
-            fetchabove = myCursor.fetchall()
-            if  (myCursor.rowcount != 0):
+    if (auditUser(current_user.username, "permissionRoot.settings.add_camera")):   
+        if request.method == 'POST':
+            cameraname = request.form['cameraname']
+            onvifURL = request.form['onvifURL']
+            username = request.form['username']
+            password = request.form['password']
+            if not onvifURL:
                 session.pop('_flashes', None)
-                flash('Camera With Same Name Exists!')
+                flash('ONVIF URL is required!')
+            elif not username:
+                session.pop('_flashes', None)
+                flash('Username is required!')
+            elif not password:
+                session.pop('_flashes', None)
+                flash('Password is required!')
             else:
-                # Before storing all this, we need to verify a few things:
-                # Credentials must be correct and ONVIF must be supported.
-                # Server will give a 401 Unauth if Credentials are wrong
-                # A Un-Parseable response if ONVIF is not supported, 200 If it is with what's expected from GetDeviceInfomation
-
-                # Send GetDeviceInfomation and determine action.
-
-                try:
-                    response = sendONVIFRequest(GetDeviceInformation, onvifURL, username, password)
-                except Exception as e:
-                        # Camera does not support onvif!
-                        session.pop('_flashes', None)
-                        flash('Camera does not seem to support Onvif, the following exception was raised: ' + str(e))
+                # Quick check to see if camera already exists in DB
+                doesCameraNameExist = myCursor.execute("Select Name from localcameras Where name = '{0}'".format(cameraname))
+                fetchabove = myCursor.fetchall()
+                if  (myCursor.rowcount != 0):
+                    session.pop('_flashes', None)
+                    flash('Camera With Same Name Exists!')
                 else:
+                    # Before storing all this, we need to verify a few things:
+                    # Credentials must be correct and ONVIF must be supported.
+                    # Server will give a 401 Unauth if Credentials are wrong
+                    # A Un-Parseable response if ONVIF is not supported, 200 If it is with what's expected from GetDeviceInfomation
 
-                    parsedResponseXML = BeautifulSoup(response.text, 'xml')
+                    # Send GetDeviceInfomation and determine action.
 
-                    # print(response.text)
-
-                    if (response.text.find("NotAuthorized") != -1):
-                        session.pop('_flashes', None)
-                        flash('Credentials Are Incorrect!')
-                    else:
-                        try:
-                            cameraManufacturer = parsedResponseXML.find_all('tds:Manufacturer')[0].text
-                        except:
+                    try:
+                        response = sendONVIFRequest(GetDeviceInformation, onvifURL, username, password)
+                    except Exception as e:
                             # Camera does not support onvif!
                             session.pop('_flashes', None)
-                            flash('Camera does not seem to support Onvif, it gave the following response:' + response.text)
+                            flash('Camera does not seem to support Onvif, the following exception was raised: ' + str(e))
+                    else:
+
+                        parsedResponseXML = BeautifulSoup(response.text, 'xml')
+
+                        # print(response.text)
+
+                        if (response.text.find("NotAuthorized") != -1):
+                            session.pop('_flashes', None)
+                            flash('Credentials Are Incorrect!')
                         else:
-                            # Now add credentials to DB, make sure to encrypt the password for storage!
-                            passwordEncrypted = cryptocode.encrypt(password, passwordRandomKey)
                             try:
-                                myCursor.execute("INSERT INTO localcameras (name, onvifURL, username, password) VALUES(%s, %s, %s, %s)", (cameraname, onvifURL, username, passwordEncrypted))
-                            except Exception as e:
+                                cameraManufacturer = parsedResponseXML.find_all('tds:Manufacturer')[0].text
+                            except:
+                                # Camera does not support onvif!
                                 session.pop('_flashes', None)
-                                flash('Database couldnt be written to, the following exception was raised: ' + str(e))
+                                flash('Camera does not seem to support Onvif, it gave the following response:' + response.text)
                             else:
-                                myDatabase.commit()
-                                # Now we can get info and do all info scraping using ONVIF
-                                onvifAutoconfigure(cameraname)
+                                # Now add credentials to DB, make sure to encrypt the password for storage!
+                                passwordEncrypted = cryptocode.encrypt(password, passwordRandomKey)
+                                try:
+                                    myCursor.execute("INSERT INTO localcameras (name, onvifURL, username, password) VALUES(%s, %s, %s, %s)", (cameraname, onvifURL, username, passwordEncrypted))
+                                except Exception as e:
+                                    session.pop('_flashes', None)
+                                    flash('Database couldnt be written to, the following exception was raised: ' + str(e))
+                                else:
+                                    myDatabase.commit()
+                                    # Now we can get info and do all info scraping using ONVIF
+                                    onvifAutoconfigure(cameraname)
 
-                                # After ONVIF autoconfigure is complete, create recording Docker Container.
+                                    # After ONVIF autoconfigure is complete, create recording Docker Container.
+                                    
+                                    #Create RTSP Cred String:
+                                        # Get RTSP URL
+                                    # Get Name's RTSP URI with username and password
+                                    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
+                                    currentiurl = myCursor.fetchone()
+                                    currentiurlString = ''.join(currentiurl)
+                                    # Get Current Camera's Username
+                                    myCursor.execute("Select username from localcameras where name='{0}'".format(cameraname))
+                                    currentiusername = myCursor.fetchone()
+                                    currentiusernameString = ''.join(currentiusername)
+                                    # Get Current Camera's Password
+                                    myCursor.execute("Select password from localcameras where name='{0}'".format(cameraname))
+                                    currentipassword = myCursor.fetchone()
+                                    currentipasswordString = ''.join(currentipassword)
+
+                                    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
+                                    rtspurl =  myCursor.fetchone()
+                                    rtspurl =  ''.join(rtspurl)
+                                    rtspurl2 = rtspurl.replace("rtsp://", "")
+                                    ip, port = rtspurl2.split(":", 1)
+                                    port = port.split("/", 1)[0]
+                                    address, params = rtspurl.split("/cam", 1)
+                                    rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
                                 
-                                #Create RTSP Cred String:
-                                    # Get RTSP URL
-                                # Get Name's RTSP URI with username and password
-                                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
-                                currentiurl = myCursor.fetchone()
-                                currentiurlString = ''.join(currentiurl)
-                                # Get Current Camera's Username
-                                myCursor.execute("Select username from localcameras where name='{0}'".format(cameraname))
-                                currentiusername = myCursor.fetchone()
-                                currentiusernameString = ''.join(currentiusername)
-                                # Get Current Camera's Password
-                                myCursor.execute("Select password from localcameras where name='{0}'".format(cameraname))
-                                currentipassword = myCursor.fetchone()
-                                currentipasswordString = ''.join(currentipassword)
+                                    addRunningContainer(cameraname, rtspCredString, "268435456", "48")
+                                    return redirect(url_for('dashboard'))
 
-                                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(cameraname))
-                                rtspurl =  myCursor.fetchone()
-                                rtspurl =  ''.join(rtspurl)
-                                rtspurl2 = rtspurl.replace("rtsp://", "")
-                                ip, port = rtspurl2.split(":", 1)
-                                port = port.split("/", 1)[0]
-                                address, params = rtspurl.split("/cam", 1)
-                                rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
-                               
-                                addRunningContainer(cameraname, rtspCredString, "268435456", "48")
-                                return redirect(url_for('dashboard'))
-
-    return render_template('add_camera.html', commit_id=commit_id, release_id=release_id)
+        return render_template('add_camera.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.add_camera", commit_id=commit_id, release_id=release_id)
 
 # Manual, if having to use non-ONVIF RTSP video sources
 @app.route('/settings/add_camera_manual/', methods=['GET', 'POST'])
 @login_required
 def addCameraManual():
     session.pop('_flashes', None)
-    if request.method == 'POST':
-        cameraname = request.form['cameraname']
-        onvifURL = request.form['onvifURL']
-        username = request.form['username']
-        password = request.form['password']
-        rtspurl = request.form['rtspurl']
-        manufacturer = request.form['manufacturer']
-        model = request.form['model']
-        serialnumber = request.form['serialnumber']
-        firmwareversion = request.form['firmwareversion']
-        
-        # Quick check to see if camera already exists in DB.
-        doesCameraNameExist = myCursor.execute("Select Name from localcameras Where name = '{0}'".format(cameraname))
-        fetchabove = myCursor.fetchall()
-        if  (myCursor.rowcount != 0):
-            session.pop('_flashes', None)
-            flash('Camera With Same Name Exists!')
-        else:
-            # Now add credentials to DB, make sure to encrypt the password for storage!
-            passwordEncrypted = cryptocode.encrypt(password, passwordRandomKey)
-            myCursor.execute("INSERT INTO localcameras (name, onvifURL, username, password, rtspurl, manufacturer, model, serialnumber, firmwareversion) VALUES(%s, %s, %s, %s,%s, %s, %s, %s, %s)", (cameraname, onvifURL, username, passwordEncrypted, rtspurl, manufacturer, model, serialnumber, firmwareversion))
-            myCursor.execute("INSERT INTO cameradb (model, manufacturer, hasptz, hastwa) VALUES(%s, %s, %s, %s)", (model, manufacturer, False, False))
-            myDatabase.commit()
+    if (auditUser(current_user.username, "permissionRoot.settings.add_camera_manual")):   
+        if request.method == 'POST':
+            cameraname = request.form['cameraname']
+            onvifURL = request.form['onvifURL']
+            username = request.form['username']
+            password = request.form['password']
+            rtspurl = request.form['rtspurl']
+            manufacturer = request.form['manufacturer']
+            model = request.form['model']
+            serialnumber = request.form['serialnumber']
+            firmwareversion = request.form['firmwareversion']
+            
+            # Quick check to see if camera already exists in DB.
+            doesCameraNameExist = myCursor.execute("Select Name from localcameras Where name = '{0}'".format(cameraname))
+            fetchabove = myCursor.fetchall()
+            if  (myCursor.rowcount != 0):
+                session.pop('_flashes', None)
+                flash('Camera With Same Name Exists!')
+            else:
+                # Now add credentials to DB, make sure to encrypt the password for storage!
+                passwordEncrypted = cryptocode.encrypt(password, passwordRandomKey)
+                myCursor.execute("INSERT INTO localcameras (name, onvifURL, username, password, rtspurl, manufacturer, model, serialnumber, firmwareversion) VALUES(%s, %s, %s, %s,%s, %s, %s, %s, %s)", (cameraname, onvifURL, username, passwordEncrypted, rtspurl, manufacturer, model, serialnumber, firmwareversion))
+                myCursor.execute("INSERT INTO cameradb (model, manufacturer, hasptz, hastwa) VALUES(%s, %s, %s, %s)", (model, manufacturer, False, False))
+                myDatabase.commit()
 
-            return redirect(url_for('dashboard'))
-    return render_template('add_camera_manual.html', commit_id=commit_id, release_id=release_id)
+                return redirect(url_for('dashboard'))
+        return render_template('add_camera_manual.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.add_camera_manual", commit_id=commit_id, release_id=release_id)
 
 # List all camera models gathered over time
 @app.route('/settings/camera_models/', methods=['GET', 'POST'])
 @login_required
 def cameraModels():
     session.pop('_flashes', None)
-    if request.method == 'POST':
-        if 'cameraimage' not in request.files:
-            return 'cameraimage not in form!'
-        selectedModel = request.form['submit_button']
-        imageFile = request.files['cameraimage'].read()
-        imageb64 = str(base64.b64encode(imageFile).decode("utf-8"))
-        # Should be data:image/png;base64,iVBORw0KGgo
-        myCursor.execute("UPDATE cameradb SET image=(%s) WHERE model = '{0}'".format(selectedModel), (imageb64, ))
-        myDatabase.commit()
+    if (auditUser(current_user.username, "permissionRoot.settings.camera_models")):   
+        if request.method == 'POST':
+            if 'cameraimage' not in request.files:
+                return 'cameraimage not in form!'
+            selectedModel = request.form['submit_button']
+            imageFile = request.files['cameraimage'].read()
+            imageb64 = str(base64.b64encode(imageFile).decode("utf-8"))
+            # Should be data:image/png;base64,iVBORw0KGgo
+            myCursor.execute("UPDATE cameradb SET image=(%s) WHERE model = '{0}'".format(selectedModel), (imageb64, ))
+            myDatabase.commit()
 
-    myCursor.execute("Select * from cameradb;")
-    cameradb = myCursor.fetchall()
-    return render_template('camera_models.html', data=cameradb, commit_id=commit_id, release_id=release_id)
+        myCursor.execute("Select * from cameradb;")
+        cameradb = myCursor.fetchall()
+        return render_template('camera_models.html', data=cameradb, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.camera_models", commit_id=commit_id, release_id=release_id)
 
 # Return Favicon
 @app.route('/favicon.ico')
@@ -477,36 +539,41 @@ def returnIcon():
 @login_required
 def viewCamera(cam):
     session.pop('_flashes', None)
-    global player
+    # Permission works different here, we assume everything after view_camera is the cam name, so we run that seperate, as that would be
+    # camPermissions, every cam as a different array string
+    if ((auditUser(current_user.username, "permissionRoot.camera_list.view_camera")) and (cameraPermission(current_user.username, str(cam)))):   
+        global player
 
-    # To view the camera, we need to custom make the data we are going to pass over, like in the Camera List. Formatted as follows:
-    # Name, Manufacturer, Model Number, Serial, Firmware, CameraImage, IP. 
+        # To view the camera, we need to custom make the data we are going to pass over, like in the Camera List. Formatted as follows:
+        # Name, Manufacturer, Model Number, Serial, Firmware, CameraImage, IP. 
+        
+        # Generate Static Data
+        myCursor.execute("Select * from localcameras where name = '{0}' ".format(cam))
+        camtuple = myCursor.fetchall()
+        camdata = camtuple[0]
+        # Currently passing through the raw DB query.
+        cameraModel = camdata[7]
     
-    # Generate Static Data
-    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cam))
-    camtuple = myCursor.fetchall()
-    camdata = camtuple[0]
-    # Currently passing through the raw DB query.
-    cameraModel = camdata[7]
-   
-    # Both the client and server implement 'RTCRemotePeer' and can exchange SDP with HTTP POST. Use that SDP with the Peer and you
-    # Have a remote WebRTC Peer you can send video to! All processing and reconstruction is done on the client side.
+        # Both the client and server implement 'RTCRemotePeer' and can exchange SDP with HTTP POST. Use that SDP with the Peer and you
+        # Have a remote WebRTC Peer you can send video to! All processing and reconstruction is done on the client side.
 
-    # SDP is published to /rtcoffer/<cam>
+        # SDP is published to /rtcoffer/<cam>
 
-    # First we need to generate the raw datastream from the RTSP URL, we'll call another thread to do this, as it's temporary.
-    # This writes a frame to the POST url buffer and consistantly updates it, 
+        # First we need to generate the raw datastream from the RTSP URL, we'll call another thread to do this, as it's temporary.
+        # This writes a frame to the POST url buffer and consistantly updates it, 
 
-    # We need to pass through a custom data string now, with Onvif Events as seperate string, both as follows:
-    # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
-    # 
-    # Onvif Events: Time | Topic | Data
-    # Get Onvif Events:
+        # We need to pass through a custom data string now, with Onvif Events as seperate string, both as follows:
+        # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
+        # 
+        # Onvif Events: Time | Topic | Data
+        # Get Onvif Events:
 
-    myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC".format(cam))
-    rawOnvifQuery = myCursor.fetchall()
+        myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC".format(cam))
+        rawOnvifQuery = myCursor.fetchall()
 
-    return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id)  
+        return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id)  
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.camera_list.view_camera, {0}".format(cam), commit_id=commit_id, release_id=release_id)
 
 # WEBRTC ===================================
 #
@@ -838,41 +905,44 @@ def webRTCOFFER(cam):
 @login_required
 def deleteCamera():
     session.pop('_flashes', None)
-    if request.method == 'POST':
-        campass = request.form['campass']
-        postpassword = request.form['userpass']
-        cameraName = request.form['camname']
-        # This post request will only run if both of these values not only
-        # First check Camera Password Against Server, pull from DB
-        # Then get current user ID, and password hash, then compare!
+    if (auditUser(current_user.username, "permissionRoot.settings.delete_camera")):   
+        if request.method == 'POST':
+            campass = request.form['campass']
+            postpassword = request.form['userpass']
+            cameraName = request.form['camname']
+            # This post request will only run if both of these values not only
+            # First check Camera Password Against Server, pull from DB
+            # Then get current user ID, and password hash, then compare!
 
-        # Get Campass From DB
-        myCursor.execute("Select password from localcameras where name='{0}'".format(cameraName))
-        currentpassword = myCursor.fetchone()
-        currentpasswordString = ''.join(currentpassword)
-        # Originally wanted to hash submitted password and check if it matches with what's in DB,
-        # but cryptocode generates a different Hash :/
-        # Now I just decrypt the DB entry and compare.
-        decryptedDBPASS =  cryptocode.decrypt(str(currentpasswordString), passwordRandomKey)
+            # Get Campass From DB
+            myCursor.execute("Select password from localcameras where name='{0}'".format(cameraName))
+            currentpassword = myCursor.fetchone()
+            currentpasswordString = ''.join(currentpassword)
+            # Originally wanted to hash submitted password and check if it matches with what's in DB,
+            # but cryptocode generates a different Hash :/
+            # Now I just decrypt the DB entry and compare.
+            decryptedDBPASS =  cryptocode.decrypt(str(currentpasswordString), passwordRandomKey)
 
-        if campass == decryptedDBPASS:
-            # Now check if the user password matches
-            if verifyUserPassword(current_user.username, postpassword):
-                # Now delete the DB entry of the cameraName
-                myCursor.execute("DELETE FROM localcameras where name='{0}'".format(cameraName))
-                myDatabase.commit()
-                # Now that the DB entry is gone, remove the Docker Container!
-                removeContainerCompletely(cameraName)
+            if campass == decryptedDBPASS:
+                # Now check if the user password matches
+                if verifyUserPassword(current_user.username, postpassword):
+                    # Now delete the DB entry of the cameraName
+                    myCursor.execute("DELETE FROM localcameras where name='{0}'".format(cameraName))
+                    myDatabase.commit()
+                    # Now that the DB entry is gone, remove the Docker Container!
+                    removeContainerCompletely(cameraName)
 
 
-    # We will give a text based list of the camera names, when a camera is clicked on, you will need your Users password for zemond
-    # and the camera's password on file.
+        # We will give a text based list of the camera names, when a camera is clicked on, you will need your Users password for zemond
+        # and the camera's password on file.
 
-    # Get all camera's
-    myCursor.execute("Select name from localcameras")
-    camnames = myCursor.fetchall()
+        # Get all camera's
+        myCursor.execute("Select name from localcameras")
+        camnames = myCursor.fetchall()
 
-    return render_template('delete_camera.html', data=camnames, commit_id=commit_id, release_id=release_id)  
+        return render_template('delete_camera.html', data=camnames, commit_id=commit_id, release_id=release_id)  
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.delete_camera", commit_id=commit_id, release_id=release_id)
 
 
 def updateSnapshots():
