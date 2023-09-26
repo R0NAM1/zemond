@@ -1,0 +1,14 @@
+.permFlexContainer {
+    display: flex;
+    justify-content: space-between;
+}
+
+.permFlexContainer > input {
+    flex: 1;
+    margin: 10px;
+}
+
+.permFlexContainer > div {
+    flex: 1;
+    margin: 10px;
+}

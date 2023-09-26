@@ -15,9 +15,24 @@
         </div>
 
         <audio id="audio" autoplay="true"></audio>
-        <video controls="true" muted id="video" autoplay="true" playsinline="true" width="750"></video>
-
+        <div id="videoContainer" style="position: relative;">
+            <!-- <img id="loadingImage" src="{{url_for('static', filename='/pictures/loading.gif')}}" style="position: absolute; translate: 300px"> -->
+            <video controls="true" muted id="video" autoplay="true" playsinline="true" width="750"></video>
+        </div>
     </div> 
+    
+    <script>
+        var video = document.getElementById('video');
+        var loadingImage = document.getElementById('loadingImage');
+      
+        video.onwaiting = function() {
+          loadingImage.style.display = 'block';
+        };
+      
+        video.oncanplay = function() {
+          loadingImage.style.display = 'none';
+        };
+      </script>
     
     <!--poster="{{url_for('static', filename='/pictures/loading.gif')}}"-->
 

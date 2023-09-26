@@ -92,30 +92,73 @@ function arrowKeyCheckAddListeners() {
 
             if(gpButton == false) {
 
+                var divideSpeed = false;
+
+                if (event.shiftKey) {
+                    divideSpeed = true;
+                }
+
                 if (event.key === 'ArrowUp') {
-                    sendPtzMessage('up', speedSlider.value)
+                    if (divideSpeed) {
+                        sendPtzMessage('up', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('up', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
                 else if (event.key === 'ArrowDown') {
-                    sendPtzMessage('down', speedSlider.value)
+                    if (divideSpeed) {
+                        sendPtzMessage('down', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('down', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
-                if (event.key === 'ArrowLeft') {
-                    sendPtzMessage('left', speedSlider.value)
+                else if (event.key === 'ArrowLeft') {
+                    if (divideSpeed) {
+                        sendPtzMessage('left', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('left', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
-                if (event.key === 'ArrowRight') {
-                    sendPtzMessage('right', speedSlider.value)
+                else if (event.key === 'ArrowRight') {
+                    if (divideSpeed) {
+                        sendPtzMessage('right', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('right', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
-                if (event.key === '+') {
-                    sendPtzMessage('positive', speedSlider.value)
+                else if (event.key === '+') {
+                    if (divideSpeed) {
+                        sendPtzMessage('positive', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('positive', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
-                if (event.key === '-') {
-                    sendPtzMessage('negative', speedSlider.value)
+                else if (event.key === '-') {
+                    if (divideSpeed) {
+                        sendPtzMessage('negative', (speedSlider.value/2.5))
+                    }
+                    else{
+                        sendPtzMessage('negative', speedSlider.value)
+                    }
+                    
                     gpButton = true;
                 }
+                
         }
     }})
 

@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+
+<script src="{{url_for('static', filename='js/permission_mod.js')}}"></script>
+
+<script type="text/javascript">
+  var permissionTreeObject = '{{ permissionTreeObject }}';
+  window.permissionTreeObject = permissionTreeObject;
+
+  var cameraList = '{{ camList }}'
+  window.cameraList = cameraList;
+</script>
+
+<link rel="stylesheet" href="{{url_for('static', filename='css/permission_mod.css')}}">
+
+<div class="permFlexContainer">
+
+  <table>
+
+  <tr>
+    <select name="users" id="userselect">
+    {% for user in userlist %}
+            <option value="{{ user[0] }}">{{ user[0] }}</option>
+    {% endfor %}
+    </select>
+    
+    <th>
+      <input type="button" value="Load Permissions" onclick="loadUserPermissions(userselect.value)">
+      </input>
+    </th>
+  </tr>
+
+  <tr>
+    <td>
+      <div id="permissionsTree">
+        Full Permission Tree
+        <input type="button" value="Add Permission" onclick="addPerm(userselect.value)"></input>
+        <input id="wildBox" type="checkbox" value=" Add Wildcard *">Add Wildcard .*</input>
+      </div>
+    </td>
+
+    <td>
+      <div id="assignedPermissions">
+        User Permissions
+        <span style="white-space: pre-line"></span>
+        <input type="button" value="Remove Permission" onclick="rmPerm(userselect.value)"></input>
+      </div>
+    </td>
+
+    <td>
+      <div id="cameraList">
+        Local Cameras
+        <span style="white-space: pre-line"></span>
+        <input type="button" value="Add Camera" onclick="addCam(userselect.value)"></input>
+      </div>
+    </td>
+
+    <td>
+      <div id="assignedCams">
+        Allowed Cameras
+        <span style="white-space: pre-line"></span>
+        <input type="button" value="Remove Camera" onclick="rmCam(userselect.value)"></input>
+      </div>
+    </td>
+  </tr>
+</table>
+</div>
+
+<div id='feedbackMsg'>
+</div>
+
+{% for mesg in get_flashed_messages() %}
+<h1>{{ mesg }}</h1>
+{% endfor %}
+
+
+
+{% endblock %}
+
+

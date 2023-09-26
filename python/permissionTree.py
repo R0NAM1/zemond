@@ -21,6 +21,7 @@ permissionTreeObject = {
             "add_user": {},
             "reset_password": {},
             "sync_ldap": {},
+            "manage_perms": {},
             "delete_user": {},
             "add_camera": {},
             "camera_models": {},

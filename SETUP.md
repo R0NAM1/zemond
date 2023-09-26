@@ -35,3 +35,7 @@ In both search for the string 'nvr.internal.my.domain' and set it to your specif
 To test the server, run 'python3 app.py'
 
 (In case requirements.txt changes, run pip3 freeze > requirements.txt)
+
+Make Admin user for permission editing, users cannot edit their own perms, so make a specific super account
+for that specific user. Seperate permissions. Ideally user-perm accounts only can access manage_perms, every
+other account cant.

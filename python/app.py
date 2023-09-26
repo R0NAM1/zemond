@@ -1,5 +1,5 @@
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer # Have to import for just firstRun because of global weirdness
-from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup
+from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response
 from flask_sock import Sock
 from flask_login import LoginManager, UserMixin, login_user, current_user
 from functools import wraps
@@ -24,12 +24,18 @@ from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCo
 from ptzHandler import readPTZCoords, sendContMovCommand
 from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
+from permissionTree import permissionTreeObject
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
 login_manager.init_app(app)
 
 app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practice, generate some random hash string.
+
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE='None',
+)
 
 # Customer User object that Flask_login requires, just takes a string and returns it as self.username (User(username))
 # Also returns other flaskio funnies, is_active True, is_anon False, I handle all that logic.
@@ -259,6 +265,121 @@ def settings():
         return render_template('settings.html', commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.settings", commit_id=commit_id, release_id=release_id)
+
+# Mod User Permissons
+@app.route('/settings/manage_perms/', methods=['GET', 'POST'])
+@login_required
+def manage_perms():
+    if (auditUser(current_user.username, "permissionRoot.settings.manage_perms")):   
+        if request.method == 'POST':
+            # Check command
+            requestSplit = request.data.decode().split(':')
+            print(requestSplit)
+            command = requestSplit[0]
+            if command == 'getPermissions':
+                # Change user logic
+                data = requestSplit[1]
+                myCursor.execute("Select permissions,camPermissions from userTable WHERE username='{0}'".format(data))
+                combPerm = myCursor.fetchall()                
+
+                
+                return make_response(str(combPerm), 200)
+            
+            elif command == 'addPerm':
+                reqPerm = requestSplit[1]
+                user = requestSplit[2]
+                # Check if PERM already exists
+                myCursor.execute("Select permissions from userTable WHERE username='{0}'".format(user))
+                perms = str(myCursor.fetchall())
+                perms = perms[3:len(perms) - 4]
+                perms = perms.replace("'", "")
+                perms = perms.split(', ')
+
+                for perm in perms:
+                    if reqPerm == perm:
+                        print(perm)
+                        return make_response(str("FALSE"), 200)
+                                 
+                # If not have perm, allow to happen and send audit log
+                sendAuditLog(current_user.username, "HIGH", "Added Permission " + reqPerm + " to user " + user)
+                
+                # UPDATE userTable SET permissions = ARRAY_APPEND(permissions, '{0}') WHERE username = {1};
+                myCursor.execute("UPDATE userTable SET permissions = ARRAY_APPEND(permissions, '{0}') WHERE username = '{1}';".format(reqPerm, user))
+                myDatabase.commit()
+                
+                return make_response(str("TRUE"), 200)
+            
+            elif command == 'rmPerm':
+                # Try to remove from DB, if fails because it dosen't exist then that's a client issue.
+                    reqPerm = requestSplit[1]
+                    user = requestSplit[2]
+                    try:
+                        myCursor.execute("UPDATE userTable SET permissions = ARRAY_REMOVE(permissions, '{0}') WHERE username = '{1}';".format(reqPerm, user))
+                        myDatabase.commit()
+                        # Send audit log
+                        sendAuditLog(current_user.username, "HIGH", "Removed Permission " + reqPerm + " from user " + user)
+                        return make_response(str("TRUE"), 200)
+                    except:
+                        return make_response(str("FALSE"), 200) 
+        
+            elif command == 'addCam':
+                reqCam = requestSplit[1]
+                user = requestSplit[2]
+                # Check if CAM already exists
+                myCursor.execute("Select campermissions from userTable WHERE username='{0}'".format(user))
+                cams = str(myCursor.fetchall())
+                cams = cams[3:len(cams) - 4]
+                cams = cams.replace("'", "")
+                cams = cams.split(', ')
+
+                for cam in cams:
+                    if reqCam == cam:
+                        # print(cam)
+                        return make_response(str("FALSE"), 200)
+                                 
+                # If not have perm, allow to happen and send audit log
+                sendAuditLog(current_user.username, "HIGH", "Added Camera " + reqCam + " to user " + user)
+                
+                # UPDATE userTable SET permissions = ARRAY_APPEND(permissions, '{0}') WHERE username = {1};
+                myCursor.execute("UPDATE userTable SET campermissions = ARRAY_APPEND(campermissions, '{0}') WHERE username = '{1}';".format(reqCam, user))
+                myDatabase.commit()
+                
+                return make_response(str("TRUE"), 200)   
+            
+            elif command == 'rmCam':
+                # Try to remove from DB, if fails because it dosen't exist then that's a client issue.
+                reqCam = requestSplit[1]
+                user = requestSplit[2]
+                try:
+                    myCursor.execute("UPDATE userTable SET campermissions = ARRAY_REMOVE(campermissions, '{0}') WHERE username = '{1}';".format(reqCam, user))
+                    myDatabase.commit()
+                    # Send audit log
+                    sendAuditLog(current_user.username, "HIGH", "Removed Camera " + reqCam + " from user " + user)
+                    return make_response(str("TRUE"), 200)
+                except:
+                    return make_response(str("FALSE"), 200) 
+    
+    #####
+    ##GET
+    #####
+                
+        # Grab user list of users, when one is selected get user perms and camperms, and allow modification
+        myCursor.execute("SELECT DISTINCT username FROM userTable ORDER BY username ASC;")
+        userList = myCursor.fetchall()
+        
+        # Remove current user from userlist
+        for user in userList:
+            if current_user.username == user[0]:
+                userList.remove(user)
+        
+        # Grab all local cameras
+        myCursor.execute("SELECT DISTINCT name FROM localcameras ORDER BY name ASC;")
+        camList = myCursor.fetchall()
+        
+        session.pop('_flashes', None)
+        return render_template('permission_mod.html', camList=camList, permissionTreeObject=permissionTreeObject, userlist=userList, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.manage_perms", commit_id=commit_id, release_id=release_id)
 
 # When adding a user manually, do it here
 @app.route('/settings/add_user/', methods=['GET', 'POST'])
@@ -999,6 +1120,12 @@ def updateSnapshots():
         onlineCameraCache = tmpCameraCache;
         print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
         time.sleep(8) # Time to wait between gathering snapshots
+        # # Task Check
+        # loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(loop)
+        # tasks = asyncio.all_tasks(loop)
+        # for task in tasks:
+        #     print("Print Task: " + str(task))
 
 def startWebClient():
     # Testing Web Server
