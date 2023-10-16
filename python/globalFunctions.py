@@ -2,6 +2,8 @@ import psycopg2
 import requests
 from requests.auth import HTTPDigestAuth
 
+global userUUIDAssociations
+
 def sendONVIFRequest(payload, onvifURL, username, password):
     headers = {
         'Content-Type': 'text/xml; charset=utf-8'
@@ -11,6 +13,7 @@ def sendONVIFRequest(payload, onvifURL, username, password):
 
 passwordRandomKey = 'ChangeMeTooooooo!'
 
+userUUIDAssociations = {}
 
 databaseURL = '10.0.0.15'
 databasePort = 5432

@@ -83,6 +83,14 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS auditLog (
    auditMessage varchar (500)
    );""")
 
+cursor.execute("""CREATE TABLE IF NOT EXISTS configuredMonitors (
+   camArray JSONB,
+   timeInfo varchar(50) DEFAULT '0s',
+   monitorName varchar(50),
+   monitorTemplate varchar (500),
+   attMap varchar(50),
+   lengthbywidthnum varchar(3)
+   );""")
 # Commit Changes To Database
 myDatabase.commit()
 

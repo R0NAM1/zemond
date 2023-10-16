@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<head>
+    <title>{{ monitor }} View</title>
+</head>
+
+<script type="module" src="{{url_for('static', filename='js/' + monitorjsfile + '.js')}}"></script>
+
+<div id="monitorbody">
+
+</div>
+
+<script type="module">
+    import {loadMonitor} from "{{url_for('static', filename='js/' + monitorjsfile + '.js')}}";
+    window.onload = loadMonitor();
+</script>
+
+<script type="text/javascript">
+    var dbinfo = '{{ dbinfo }}';
+    var camarray = '{{ camarray }}';
+    var monitor = '{{ monitor }}';
+    window.dbinfo = dbinfo;
+    window.monitor = monitor;
+    window.camarray = camarray;
+</script>

@@ -3,13 +3,12 @@ permissionTreeObject = {
     
     "permissionRoot": {
         
-        "dashboard": {
-            "test": {
-                "myface": {}
-            }
-            },
+        "dashboard": {},
         
-        "monitors": {},
+        "monitors": {
+            "view": {},
+            "xbxedit": {}
+            },
         
         "camera_list": {
             "view_camera": {}
@@ -21,6 +20,7 @@ permissionTreeObject = {
             "add_user": {},
             "reset_password": {},
             "sync_ldap": {},
+            "audit_log": {},
             "manage_perms": {},
             "delete_user": {},
             "add_camera": {},

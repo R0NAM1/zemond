@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{% block title %}  {% endblock %}</h1>
+
+<script src="{{url_for('static', filename='js/xbxarray_edit.js')}}"></script>
+<link rel="stylesheet" href="{{url_for('static', filename='css/xbxarray_edit.css')}}">
+    
+    <!--Select X By X, scale by flexbox
+    send each box to array, associate with camera
+    if a timescale is defined, allow with one click for it to 'scroll' (Change video source) every x seconds
+    all editor does is defined x by x and which camera is associated -->
+    <div id='x3'>
+        <select id='x1'>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+        <h4>By</h4>
+        <select id='x2'>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+    </div>
+
+    <div id="secondmodifier">
+            <h4>Seconds for slideshow</h4>
+            <input type="text" id="secondbox" placeholder="0 To Disable Slideshow">
+    </div>
+
+    <h4>Camera Selection Array</h4>
+
+    <div id="camarray">
+    </div>
+
+    <div id="submitbutton">
+        <button id="submitbuttonelement" type="button" onclick="submitDataToDatabase()">Apply Changes</button>
+    </div>
+
+    {% for mesg in get_flashed_messages() %}
+    <h1>{{ mesg }}</h1>
+    {% endfor %}
+
+    <script>
+        var localcameras = '{{ localcameras }}';
+        var loadedMonInfo = '{{ loadedMonInfo }}';
+        let slotList = {};
+        // Grab Camera Names
+        localcameras = (localcameras).replace(/&#39;/g, '"');
+        localcameras = localcameras.substring(1, localcameras.length - 1)
+        localcameras = localcameras.split(", ");
+
+        // Clean up individual items
+        for (let i = 0; i < localcameras.length; i++) {
+            localcameras[i] = (localcameras[i].substring(1, localcameras[i].length - 2)).replaceAll('"', '');
+        }
+
+        var x3 = document.getElementById("x3");
+
+        // Add event listener for array
+        x3.addEventListener('change', (event) => {
+            // With it changed, load new select element and show value in array,
+            takexxGenCamSelectArray()
+        });
+
+        window.localcameras = localcameras;
+        window.loadedMonInfo = loadedMonInfo; 
+        window.onload = loadSettingsFromDB();
+
+    </script>
+
+
+
+    {% endblock %}

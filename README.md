@@ -22,12 +22,12 @@ Zemond is great for the home, buisness or any other place that needs security. T
 - Live Video and Audio to the Browser (Done)
 - PTZ To the camera (Done)
 - Voice to the camera from client (Done)
-- Voice from a SIP endpoint to the zemond server, routed to the camera.
-- User management.
+- User audit log (Done)
+- Voice from a SIP endpoint to the zemond server, routed to the camera. (Later)
+- User management. (About done, do ldap later)
 - Multi-monitor mode, with maps you can customize and preset dashboards.
 - A timeline search, so you can export and snapshot certain chunks of footage.
 - Plugins for (AI detection, license plate detection, other behaviors), just ran as a seperate thread definition.
-- User audit log
 - Custom video element controls
 - Docker swarm integration so we can have multiple nodes for distributed processing
 

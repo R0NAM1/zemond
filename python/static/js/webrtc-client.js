@@ -1,6 +1,8 @@
 import '/static/node_modules/webrtc-adapter/out/adapter.js';
+import { stunServer } from '/static/js/stunServer.js';
 // Adapter JS takes over certain functions if needed, for browser cross-compatability.
 // You just include it and it does the rest.
+// Import Stun Server URL from seperate JS file
 var pc = null;
 
 // PC Will Be The Server
@@ -11,7 +13,7 @@ let outputStream;
 var dc = null, dcInterval = null, globalDcObject = null, globalPcObject = null, micTrack = null, finalTrack = null, hasCameraControl = false, hasTWA = false, hasPTZ = false, gpButton = false;
 var hasMicControl = false;
 
-// Game pad loop to check buttons, probably run async
+// Game pad loop to check buttons, runs async to always check
 async function gamepadLoopCheck() {
     var gamepads = navigator.getGamepads();
     var gamepad = gamepads[0];
@@ -28,32 +30,32 @@ async function gamepadLoopCheck() {
             // DPAD left down (Axis 1: 1)
             
             if (gamepad.axes[1] > 0.75) {
-                console.log("-");
+                // console.log("-");
                 sendPtzMessage('negative', speedSlider.value)
                 gpButton = true;
             }
             else if (gamepad.axes[1] < -0.75) {
-                console.log("+");
+                // console.log("+");
                 sendPtzMessage('positive', speedSlider.value)
                 gpButton = true;
             }
             else if (gamepad.axes[6] == 1) {
-                console.log("Right");
+                // console.log("Right");
                 sendPtzMessage('right', speedSlider.value)
                 gpButton = true;
 
             }else if (gamepad.axes[6] == -1) {
-                console.log("Left");
+                // console.log("Left");
                 sendPtzMessage('left', speedSlider.value)
                 gpButton = true;
 
             }else if (gamepad.axes[7] == 1) {
-                console.log("Down");
+                // console.log("Down");
                 sendPtzMessage('down', speedSlider.value)
                 gpButton = true;
 
             }else if (gamepad.axes[7] == -1) {
-                console.log("Up")
+                // console.log("Up")
                 sendPtzMessage('up', speedSlider.value)
                 gpButton = true;
             }
@@ -69,14 +71,16 @@ async function gamepadLoopCheck() {
         }
     }
 }
- // Axis check
+ // Axis check (Uncomment to show debug for axes)
             // for (var i = 0; i < gamepad.axes.length; i++) {
             //     var axis = gamepad.axes[i];
             //     console.log("Axis " + i + ": value = " + axis);
             //   }
 
+// For arrow key ptz control
 function arrowKeyCheckAddListeners() {
 
+    // If key up is certain key, send stop
     document.addEventListener('keyup', (event) => {
 
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === '+' || event.key === '-') {
@@ -86,12 +90,14 @@ function arrowKeyCheckAddListeners() {
 
     })
 
+    // On key down
     document.addEventListener('keydown', (event) => {
-     
+        // If Can and has Permission
         if (hasPTZ && hasCameraControl) {
-
+            // If current button is false
             if(gpButton == false) {
-
+                // If Shift Key, divide speed.
+                // If Any Valid key, send movement
                 var divideSpeed = false;
 
                 if (event.shiftKey) {
@@ -165,7 +171,6 @@ function arrowKeyCheckAddListeners() {
 
 }
 
-
 // This Function runs asycnronously, calls adapter.js to get the browser type and version, then creates an offer based on some
 // config to send to the server.
 async function negotiate() {
@@ -214,12 +219,10 @@ async function negotiate() {
 export async function startWebRtc(resampledMicTrack) {
     var config = {
         sdpSemantics: 'unified-plan', // Modern SDP format.
-        iceServers: [{"urls": "stun:nvr.internal.my.domain"}] //This will be dynamic based on server config later
+        iceServers: [stunServer] //This will be dynamic based on server config later
     };
 
     pc = new RTCPeerConnection(config); // Set server to config
-
-
 
     // connect audio / video
     // + audio backstream for 'two way audio'

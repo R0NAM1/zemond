@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %}  {% endblock %}</h1>
+
+    <script src="{{url_for('static', filename='js/monitors.js')}}"></script>
+    <link rel="stylesheet" href="{{url_for('static', filename='css/monitors.css')}}">
+    
+    <div class="tabs">
+
+        <div class="tab" id="existTab" onclick="openTab('existTabContent')">Current Monitors</div>
+        <div class="tab" id="newTab" onclick="openTab('newTabContent')">Add Monitor</div>
+
+    </div>
+
+    <div class="tab-content" id='existTabContent'>
+        
+        <div id ="monitors">
+            <table>
+                {% for mon in monList %}
+                <tr>
+                    <td><a href="/monitors/view/{{ mon[0] }}">{{ mon[0] }} ({{ mon[1] }})</a></td>
+                    <td><a href="/monitors/xbxedit/{{ mon[0] }}">Edit</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+
+    <div class="tab-content" id='newTabContent'>
+        <input type="button" value="Add from X By X Template" onclick="xbxedit(monNewName.value)"></input>
+        <input type="button" value="Add from Map Template" onclick=""></input>
+        <form>
+            <input id="monNewName" type="text" placeholder="New Monitor Name" name="username" value="">
+        </form>
+    </div>
+<script>
+    window.onload = openTab('existTabContent');
+</script>
+{% endblock %}

@@ -19,12 +19,13 @@ from aiortc.rtcrtpsender import RTCRtpSender
 #import Zemond Specific Parts
 from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
-from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
+from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, userUUIDAssociations
 from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely, firstRunDockerCheck
-from ptzHandler import readPTZCoords, sendContMovCommand
+from ptzHandler import readPTZCoords, sendContMovCommand, sendAuthenticatedPTZContMov, updatePTZReadOut
 from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 from permissionTree import permissionTreeObject
+from webRtc import singleWebRtcStart, monWebRtcStart
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
@@ -53,7 +54,6 @@ class User(UserMixin):
 
 global snapshotCache, userUUIDAssociations;
 
-userUUIDAssociations = {}
 
 release_id = 'Alpha 0.0.1'
 
@@ -149,10 +149,150 @@ def dashboard():
 def monitors():
     session.pop('_flashes', None)
     if (auditUser(current_user.username, "permissionRoot.monitors")):
-        return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+        # Two tabs, added monitors, add monitor, left would show all configured monitors in the db, while right would show templates
+        # cameras and maps would be plugged into.
+        
+        # Proposed templates:
+        # - X by X camera array, can scale, can be timed to roll to each.
+        # - Single Camera Mode, with map at bottom right
+        # - More later...
+        # 'Templates' are just editors. Click on add new and brings up the specific new editor.
+        
+        # Grab Monitor lists, types.
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors;")
+        monList = myCursor.fetchall()
+        
+        # print(monList)
+        
+        return render_template('monitors.html', monList=monList, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
+
+@app.route('/monitors/view/<monitor>')
+@login_required
+def view_monitor(monitor):
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.monitors.view")):
+        # Check type of monitor, serve specific JS file for different type
+        # xbxview.js, fnafmode.js
+        monitorjsfile = "non"
+        # print(monList)
+        
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitorName='{0}';".format(monitor))
+        monList = myCursor.fetchall()
+        
+        monList = monList[0]
+                
+        if monList[1] == "xbx":
+            monitorjsfile = "xbxview"
+        elif monList[1] == "fnaf":
+            monitorjsfile = "fnafmode"
+            
+        myCursor.execute("Select lengthbywidthnum, timeinfo from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+        dbinfo = myCursor.fetchone()
+        
+        myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+        camarray = str(myCursor.fetchone())
+        
+        # for monitor in monList:
+        #     print(monitor[1])
+        
+        return render_template('view_monitor.html', camarray=camarray, dbinfo=dbinfo, monitorjsfile=monitorjsfile, monitor=monitor, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
+# Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
+
+    
+    
+@app.route('/monitors/xbxedit/<monitor>', methods=['GET', 'POST'])
+@login_required
+def xbxedit(monitor):
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.monitors.xbxedit")):
+        
+        if request.method == 'POST':
+            splitData = request.data.decode().split("|")
+            lxw = splitData[0]
+            timeinfo = splitData[1]
+            camarray = splitData[2]
+            # lengthbywidthnum, timeinfo, camarray
+
+            # Position in array + 1 is slot index
+            camarray = camarray.split(",")
+
+            # Have processed data, now check if monitor entry exists, if not create new entry, if so modify entry.
+            myCursor.execute("Select monitorName from configuredMonitors;")
+            allMon = myCursor.fetchall()
+                        
+            # Create jsoncamarray
+            
+            jsoncamarray = {}
+            
+            for i, cam in enumerate(camarray):
+                jsoncamarray[str(i + 1)] = {cam: {}}
+                
+            jsoncamarray = json.dumps(jsoncamarray)
+            
+            for mon in allMon:
+                mon = str(mon)
+                mon = mon[2:]
+                mon = mon[:-3]
+                
+                if monitor == mon:
+                    # Does exist! Modify DB entry
+                    # TODO, camarray is currently array, need to make JSON nest using (array index + 1) as parent, then array data
+                    # as child, then empty child for that.
+
+                    myCursor.execute("UPDATE configuredMonitors SET lengthbywidthnum = %s, timeinfo = %s, camarray = %s WHERE monitorName = %s;", (lxw, timeinfo, (jsoncamarray,), monitor))
+                    myDatabase.commit()
+                    flash('Entry Modified')
+                    return make_response(str("MODIFIED"), 200)
+            
+            # If the monitor exists then the above for loop will finish and return
+            # If not, the below will run and return
+            
+            myCursor.execute("INSERT INTO configuredMonitors (lengthbywidthnum, timeinfo, camarray, monitorName, monitortemplate) VALUES (%s, %s, %s, %s, %s);", (lxw, timeinfo, (jsoncamarray,), monitor, "xbx"))
+            myDatabase.commit()
+            flash('Entry Created')
+            return make_response(str("CREATED"), 200)
+        # GET REQUEST
+        # Two tabs, added monitors, add monitor, left would show all configured monitors in the db, while right would show templates
+        # cameras and maps would be plugged into.
+        
+        # Proposed templates:
+        # - X by X camera array, can scale, can be timed to roll to each.
+        # - Single Camera Mode, with map at bottom right
+        # - More later...
+        # 'Templates' are just editors. Click on add new and brings up the specific new editor.
+        
+        loadedMonInfo = "False"
+        # First, check if monitor exists, if not send false in loadedMonInfo, else send array.
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors;")
+        allMon = myCursor.fetchall()
+        
+        myCursor.execute("Select name from localcameras ORDER BY name ASC")
+        localcameras = myCursor.fetchall()
+                                
+        for mon in allMon:
+            monitorName = str(mon[0])
+            template = str(mon[1])
+            
+            if monitorName == monitor:
+                # Make sure template is correct,
+                if template == 'xbx':
+                    # Load monitor info into var
+                    # Loaded mon info would then be a tuple of the following:
+                    # lengthbywidthnum, timeinfo, camarray
+                        myCursor.execute("Select lengthbywidthnum, timeinfo, camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitorName))
+                        loadedMonInfo = myCursor.fetchall()
+                        loadedMonInfo = str(loadedMonInfo).replace("', ", "'| ")
+        
+        
+        return render_template('xbxarray_edit.html', localcameras=localcameras, loadedMonInfo=loadedMonInfo, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.monitors.xbxedit", commit_id=commit_id, release_id=release_id)
+
 
 @app.route('/search/')
 @login_required
@@ -380,6 +520,33 @@ def manage_perms():
         return render_template('permission_mod.html', camList=camList, permissionTreeObject=permissionTreeObject, userlist=userList, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.settings.manage_perms", commit_id=commit_id, release_id=release_id)
+
+# Sync users in ldap, do later.
+@app.route('/settings/sync_ldap/', methods=['GET', 'POST'])
+@login_required
+def syncLdap():
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.settings.sync_ldap")):   
+        return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.sync_ldap", commit_id=commit_id, release_id=release_id)
+
+# Audit log view
+@app.route('/settings/audit_log/', methods=['GET', 'POST'])
+@login_required
+def auditLog():
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.settings.audit_log")):
+        
+        myCursor.execute('SELECT * FROM auditLog ORDER BY timelogged DESC;')
+        logs = myCursor.fetchall()
+           
+        # Add sorting and CSV export later, for now it can happen through direct DB export.
+           
+        return render_template('audit_log.html', logs=logs, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.settings.sync_ldap", commit_id=commit_id, release_id=release_id)
+
 
 # When adding a user manually, do it here
 @app.route('/settings/add_user/', methods=['GET', 'POST'])
@@ -697,7 +864,6 @@ def viewCamera(cam):
         return render_template('permission_denied.html', permissionString="permissionRoot.camera_list.view_camera, {0}".format(cam), commit_id=commit_id, release_id=release_id)
 
 # WEBRTC ===================================
-#
 def uuidWatchdog():
     # Make a regular thread that checks all added UUIDS, and the pingtime attatched.
     # If pingtime is above set value, stop and close.
@@ -727,257 +893,8 @@ def uuidWatchdog():
                 # Remove from userUUIDAssociations
                 del userUUIDAssociations[uuid]
                 break
-
-async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
-    # Get Camera Info
-
-    # THE CURRENT ISSUE I am having is with the event loops, because this get's called to run in another thread, but it still needs
-    # to be awaitable, 
-    # Current Warning Is: /usr/lib/python3.10/threading.py:953: RuntimeWarning: coroutine 'updatePTZReadOut' was never awaited
-    # Ref Article: https://xinhuang.github.io/posts/2017-07-31-common-mistakes-using-python3-asyncio.html
-    # https://lucumr.pocoo.org/2016/10/30/i-dont-understand-asyncio/
-
-    # This was FIXED thanks to GPT-4, but through a special frontend phind.com, (https://www.phind.com/search?cache=fc03e656-53f9-4b1e-bfe4-8c4632d7fe5c)
-
-    
-    # Getting Current COORDS from camera
-    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-    camtuple = myCursor.fetchall()
-    camdata = camtuple[0]
-    
-    # While Object exists, send Coords
-    # Since messages are random, we send a identifier + data sepeerated by |, so 'ptzcoordupdate|X Y'
-    
-    while True:
-        ptzcoords = readPTZCoords(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey))
-        # print("Updating Coords to {0}".format(ptzcoords))
         
-        # Publish Here
-        try:
-            channel_object.send('ptzcoordupdate|' +str(ptzcoords))
-        except:
-            # Assume channel closed, return.
-            return
-        await asyncio.sleep(0.5)
-
-def sendAuthenticatedPTZContMov(cameraName, direction, speed, tmpCamTuple):
-    # Get camera credentials once
-    
-    if (tmpCamTuple == False):
-        myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-        camtuple = myCursor.fetchall()
-        tmpCamTuple = True
-    elif (tmpCamTuple == True):
-        return
-    
-    # print(tmpCamTuple)
-
-    
-    camdata = camtuple[0]
-    finalXVelocity = 0
-    finalYVelocity = 0
-    zoom = 0
-    speed = (float(speed) * 0.10)
-
-    if (direction == "up"):
-        finalYVelocity = (speed)
-    elif (direction == "down"):
-        finalYVelocity = -(speed)
-    elif (direction == "left"):
-        finalXVelocity = -(speed)
-    elif (direction == "right"):
-        finalXVelocity = (speed)
-    elif (direction == "positive"):
-        zoom = 0.2
-    elif (direction == "negative"):
-        zoom = -0.2
-    elif (direction == "stop"):
-        finalXVelocity = 0
-        finalYVelocity = 0
-        zoom = 0
-        tmpCamTuple = False
-
-    
-    sendContMovCommand(camdata[1], camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), finalXVelocity, finalYVelocity, zoom)
-
-# Initializes objects and connections we need.
-async def webRtcStart(thisUUID, dockerIP, cameraName):
-    try:
-        # Pingtime holds the UUID and the current ping time (Time since last ping pong message from client, if over 5 seconds or so get rid of)
-        global userUUIDAssociations
-            
-        # Set Media Source and decode offered data
-        # Media source being local docker container and regular video frames
-        
-        player = MediaPlayer("rtsp://" + dockerIP + ":8554/cam1")
-        params = ast.literal_eval((request.data).decode("UTF-8"))
-
-
-        # Set ICE Server to local server, hardcoded to be NVR, change at install!
-        offer = RTCSessionDescription(sdp=params.get("sdp"), type=params.get("type"))
-        webRtcPeer = RTCPeerConnection(configuration=RTCConfiguration(
-        iceServers=[RTCIceServer(
-            urls=['stun:nvr.internal.my.domain'])]))
-
-        # We need to see if the camera supports PTZ, if it does prepare to send COORDS
-        # Select all info about current cam
-        myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-        camtuple = myCursor.fetchall()
-        camdata = camtuple[0]
-        
-        # Currently passing through the raw DB query.
-        cameraModel = camdata[7]
-        ptzcoords = {}
-        myCursor.execute("Select hasptz, hastwa from cameradb where model = '{0}' ".format(cameraModel))
-        hasEXTTuple = myCursor.fetchall()
-        
-        hasPTZ = hasEXTTuple[0][0]
-        hasTWA = hasEXTTuple[0][1]    
-
-        # Create Event Watcher On Data Channel To Know If Client Is Still Alive, AKA Ping - Pong
-        @webRtcPeer.on("datachannel")
-        def on_datachannel(channel):
-            if (hasPTZ == True):
-                ptzcoords = 'Supported' #PTZ Coords will be part of WebRTC Communication, send every 0.5 seconds.
-                update_task = asyncio.create_task(updatePTZReadOut(webRtcPeer, cameraName, channel))  
-
-            if (hasTWA == True):
-                channel.send("truetwa") # Allows Remote TWA Toggle to be clicked
-
-            tmpCamTuple = False
-
-            @channel.on("message")
-            async def on_message(message):
-                global userUUIDAssociations
-                if isinstance(message, str) and message.startswith("ping"):
-                    userUUIDAssociations[thisUUID][1] = time.time()
-                    channel.send("pong" + message[4:])
-                elif (message.startswith("up:")):
-                    msgSpeed = message.split(":")[1] 
-                    sendAuthenticatedPTZContMov(cameraName, "up", msgSpeed, tmpCamTuple)
-
-                elif (message.startswith("down:")):
-                    msgSpeed = message.split(":")[1] 
-                    sendAuthenticatedPTZContMov(cameraName, "down", msgSpeed, tmpCamTuple)
-
-                elif message.startswith("left:"):
-                    msgSpeed = message.split(":")[1] 
-                    sendAuthenticatedPTZContMov(cameraName, "left", msgSpeed, tmpCamTuple)
-
-                elif (message.startswith("right:")):
-                    msgSpeed = message.split(":")[1]
-                    sendAuthenticatedPTZContMov(cameraName, "right", msgSpeed, tmpCamTuple)
-
-                elif (message.startswith("positive:")):
-                    msgSpeed = message.split(":")[1]
-                    sendAuthenticatedPTZContMov(cameraName, "positive", msgSpeed, tmpCamTuple)
-
-                elif (message.startswith("negative:")):
-                    msgSpeed = message.split(":")[1]
-                    sendAuthenticatedPTZContMov(cameraName, "negative", msgSpeed, tmpCamTuple)
-
-                elif (message == "stop"):
-                    sendAuthenticatedPTZContMov(cameraName, "stop", 0, tmpCamTuple)
-                    
-                elif (message == "truetwa"):                
-                    # Get DB Details to plug in below
-                    myCursor.execute("Select * from localcameras where name = '{0}' ".format(cameraName))
-                    camtuple = myCursor.fetchall()
-                    camdata = camtuple[0]
-                    
-                    # Get IP, port and slashaddress
-
-                    cameraIP1 = camdata[2].split("//")
-                    cameraIP2 = cameraIP1[1].split("/")
-                    cameraIP3 = cameraIP2[0].split(":")
-                                                    
-                    port1 = cameraIP1[1].split(":")
-                    port2 = port1[1].split("/", 1)
-                    port3 = port2[0]
-                    
-                    slashAddress = port2[1]
-                    
-                    # Now send to remote via threading.
-                    microphoneStreamFuture = asyncio.create_task(
-                    streamBufferToRemote(camdata[3], cryptocode.decrypt(str(camdata[4]), passwordRandomKey), cameraIP3[0], int(port3), slashAddress, webRtcPeer)
-                    )
-                    # Add instance to uuid
-                    userUUIDAssociations[thisUUID].append(microphoneStreamFuture) # Appended to 5
-                    
-                elif (message == "falsetwa"):
-                    # print("Cancel Microphone Task")
-                    userUUIDAssociations[thisUUID][5].cancel()
-                    await asyncio.sleep(0)
-                    del userUUIDAssociations[thisUUID][5]
-                    
-                elif (message == "requestCameraControl"):
-                    amITheImposter = False
-                    anyCamUsing = False
-                    # If user wants camrea control, check userUUIDAssociations[thisUUID][3]
-                    # for any cameras with this name, and if [3] is true
-                    # IF I get another requestCameraControl, assume its a toggle and check if I'm true!
-                    currentCam = userUUIDAssociations[thisUUID][4]
-                    
-                    # First check if I'M currently using the camera
-                    if (userUUIDAssociations[thisUUID][3] == True):
-                        # I AM USING THE CAM! User wants to relenquish control then.
-                        # Send command controlbreak
-                        channel.send("controlbreak")
-                        # Nobodys using now
-                        userUUIDAssociations[thisUUID][3] = False
-                        amITheImposter = True
-                    
-                    if (amITheImposter == False):
-                        # So we don't set our control to false then itterate on it thinking nobody had it
-                        
-                        for uuid in userUUIDAssociations:
-                            # print(userUUIDAssociations[uuid][4])
-                            # If the current UUID is using same cam as me, check.
-                            if userUUIDAssociations[uuid][4] == currentCam:
-                                # If they are using the camera, say so    
-                                if userUUIDAssociations[uuid][3] == True:
-                                    anyCamUsing = True
-                    
-                        #After For loop, all uuids checked
-                        # If no user is using the camera
-                        if (anyCamUsing == False):
-                            # Not using, I will!
-                            channel.send("controlallow")
-                            # Set all to know I'm controlling
-                            userUUIDAssociations[thisUUID][3] = True
-                        elif (anyCamUsing == True):
-                            # Is being used, control deny
-                            channel.send("controldeny")
-                    
-                elif ():
-                    # print("Closing Peer!")
-                    webRtcPeer.close()
-
-        if (player.video):
-            webRtcPeer.addTrack(player.video)
-        if (player.audio):
-            webRtcPeer.addTrack(player.audio)
-    
-
-        # Wait to Set Remote Description
-        await webRtcPeer.setRemoteDescription(offer)
-
-        # Generate Answer to Give To Peer
-        answer = await webRtcPeer.createAnswer()
-        
-        # Set Description of Peer to answer.
-        await webRtcPeer.setLocalDescription(answer)
-
-        final = ("{0}").format(json.dumps(
-                {"sdp": (webRtcPeer.localDescription.sdp), "type": webRtcPeer.localDescription.type}
-            ))
-
-        # Retirn response
-        return final
-    except asyncio.CancelledError:
-        update_task.cancel()
-        
-# When we grab a WebRTC offer from out browser client.
+# When we grab a WebRTC offer from out browser client for single camera.
 @app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
 def webRTCOFFER(cam):
@@ -1000,7 +917,7 @@ def webRTCOFFER(cam):
     asyncio.set_event_loop(rtcloop)
         
     # Not sure if I'd be able to replace this, but should be fine as is.
-    parsedSDP = rtcloop.run_until_complete(webRtcStart(thisUUID, dockerIPString, cam))
+    parsedSDP = rtcloop.run_until_complete(singleWebRtcStart(thisUUID, dockerIPString, cam, request))
     
     # Now create a timer that is reset by Ping-Pong.
 
@@ -1019,7 +936,64 @@ def webRTCOFFER(cam):
     # Return Our Parsed SDP to the client
     return parsedSDP.encode()
 
+# Offer for monitors
+@app.route('/monitors/offer/<monitor>', methods=['GET', 'POST'])
+@login_required
+def offer_monitor(monitor):
+    
+    thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
+    
+    # Get current user (Static currently)
+    thisUser = current_user.username
+    
+    # Get WebRTCThread
+    global webRTCThread
+    
+    # Final array object
+    formatCamArray = []
+    
+    # Get the assigned camarray from the monitor.
+    myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+    camarray = myCursor.fetchone()[0]
+    
+    # Convert camarray json to camarray array for easy processing.
+    for key, value in camarray.items():
+        formatCamArray.append(list(value.keys())[0])
 
+    # Format cam array for SQL statement
+    camnames = ', '.join(f"'{cam}'" for cam in formatCamArray)
+    # PSQL statement to get all dockerIPs from my list
+    # From Phind again, actual magic.
+    # FROM line creates a new table from the camnames array, holding the position with ORIDNALITY
+    # JOIN line joins the table with localcameras name sorting.
+    # ORDER line returns the table to output.
+    myCursor.execute(f"""SELECT l.dockerIP
+    FROM unnest(ARRAY[{camnames}]) WITH ORDINALITY AS n(name, ord) 
+    JOIN localcameras l ON l.name = n.name
+    ORDER BY n.ord;""")
+    # assign ip array from response
+    dockerIpArray = [row[0] for row in myCursor.fetchall()]
+        
+    # Create a new event loop for this session. Allows for us to continue code, but also get a response from the client sdp
+    rtcloop = asyncio.new_event_loop()
+    asyncio.set_event_loop(rtcloop)
+        
+    # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
+    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray))
+    
+    # # # Now create a timer that is reset by Ping-Pong.
+    # Add generated info to userUUIDAssociation
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
+    userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, monitor]
+
+    
+    # # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
+    # # Another thread so we don't block the code.
+    webRTCThread = Thread(target=rtcloop.run_forever)
+    webRTCThread.start()
+      
+    # # # Return Our Parsed SDP to the client
+    return parsedSDP.encode()
 # WEBRTC END ===================================
 
 @app.route('/settings/delete_camera/', methods=['GET', 'POST'])

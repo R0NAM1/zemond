@@ -1,0 +1,18 @@
+.tabs {
+    display: flex;
+  }
+  
+  .tab {
+    padding: 10px;
+    background-color: lightgray;
+    cursor: pointer;
+  }
+  
+  .tab-content {
+    display: none;
+    padding: 10px;
+  }
+  
+  .tab-content.show {
+    display: block;
+  }
