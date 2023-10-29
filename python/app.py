@@ -27,7 +27,6 @@ from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 from permissionTree import permissionTreeObject
 from webRtc import singleWebRtcStart, monWebRtcStart
-from webRtcObjects import cameraPlayerWatchdog
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
@@ -860,14 +859,18 @@ def viewCamera(cam):
         camdata = camtuple[0]
         # Currently passing through the raw DB query.
         cameraModel = camdata[7]
-    
+        
+        # Get hasTWA from DB and see if we can start webRtc immediently or have to show audio warning
+        myCursor.execute("Select hastwa from cameradb where model = '{0}' ".format(cameraModel))
+        hasTwa = myCursor.fetchone()
+        
         # Both the client and server implement 'RTCRemotePeer' and can exchange SDP with HTTP POST. Use that SDP with the Peer and you
         # Have a remote WebRTC Peer you can send video to! All processing and reconstruction is done on the client side.
 
         # SDP is published to /rtcoffer/<cam>
 
         # First we need to generate the raw datastream from the RTSP URL, we'll call another thread to do this, as it's temporary.
-        # This writes a frame to the POST url buffer and consistantly updates it, 
+        # This updates the frames to pass to webrtc
 
         # We need to pass through a custom data string now, with Onvif Events as seperate string, both as follows:
         # GeneralData: Camera Name | Manufacturer | Model | Serial | IP Address | Camera Model Picture
@@ -875,10 +878,10 @@ def viewCamera(cam):
         # Onvif Events: Time | Topic | Data
         # Get Onvif Events:
 
-        myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC".format(cam))
+        myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC;".format(cam))
         rawOnvifQuery = myCursor.fetchall()
 
-        return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id)  
+        return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id, hasTWA=hasTwa[0])  
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.camera_list.view_camera, {0}".format(cam), commit_id=commit_id, release_id=release_id)
 

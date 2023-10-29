@@ -33,7 +33,7 @@ In both search for the string 'nvr.internal.my.domain' and set it to your specif
 'openssl rand -hex 40', using 40 characters to be more unique
 
 Remember, YOU are responsible for the Operating System Security, Network Security and ALL attack vectors. Dosen't matter how well a program is made if you don't secure any path to it.
-Security is layed.
+Security is layered.
 
 
 # TODO

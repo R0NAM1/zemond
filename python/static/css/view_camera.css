@@ -226,6 +226,7 @@ position: relative;
 }
 
 .needMicModal {
+    display: none;
     margin: auto; /* Hidden by default */
     width: 100%; /* Full width */
     height: auto; /* Full height */

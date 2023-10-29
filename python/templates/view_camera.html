@@ -21,42 +21,30 @@
         </div>
     </div> 
     
-    <script>
-        var video = document.getElementById('video');
-        var loadingImage = document.getElementById('loadingImage');
-      
-        video.onwaiting = function() {
-          loadingImage.style.display = 'block';
-        };
-      
-        video.oncanplay = function() {
-          loadingImage.style.display = 'none';
-        };
-      </script>
-    
-    <!--poster="{{url_for('static', filename='/pictures/loading.gif')}}"-->
-
     <script type="text/javascript">
         var cameraName = '{{ data[0] }}'
         var micToggled = false
+        var video = document.getElementById('video');
+        var showAudioWarning = '{{ hasTWA }}';    
+        window.showAudioWarning = showAudioWarning;
     </script>
-
+    
     <script type="module">
         import {sendPtzMessage} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.sendPtzMessage = sendPtzMessage;
-
+        
         import {toggleTwoWayAudio} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.toggleTwoWayAudio = toggleTwoWayAudio;
         
         import {requestCameraControl} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.requestCameraControl = requestCameraControl;
-
+        
         import {start} from "{{url_for('static', filename='js/webrtc-client.js')}}";
         window.start = start;
-
+        
         import "{{url_for('static', filename='node_modules/panzoom/dist/panzoom.js')}}";
         window.panzoom = panzoom;
-
+        
      </script>
 
     <script type="module" src="{{url_for('static', filename='js/webrtc-client.js')}}"></script>

@@ -437,27 +437,43 @@ export async function start() {
 
     arrowKeyCheckAddListeners()
 
-   // Put Mic into MediaStream
-   try {
-        const myMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        // Put MediaStream into comptatable source
-        const myMediaStreamSource = myAudioContext.createMediaStreamSource(myMediaStream)
+   // Put Try To Mic into MediaStream if window.showAudioWarning
+    if (window.showAudioWarning == 'True') {
+        try {
+            const myMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // Put MediaStream into comptatable source
+            const myMediaStreamSource = myAudioContext.createMediaStreamSource(myMediaStream)
 
-        //    console.log("Context Sample Rate: " + myAudioContext.sampleRate)
+            //    console.log("Context Sample Rate: " + myAudioContext.sampleRate)
 
-        const myMediaStreamDestination = myAudioContext.createMediaStreamDestination();
-        myMediaStreamSource.connect(myMediaStreamDestination)
+            const myMediaStreamDestination = myAudioContext.createMediaStreamDestination();
+            myMediaStreamSource.connect(myMediaStreamDestination)
 
-        outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
-        hasMicControl = true;
-   
-        startWebRtc(outputStream)
+            outputStream = myMediaStreamDestination.stream.getAudioTracks()[0];
+            hasMicControl = true;
+    
+            startWebRtc(outputStream)
+        }
+        catch {
+            startWebRtc()
+        }
     }
-    catch {
+    else {
         startWebRtc()
     }
 
 }
 
-// window.onload = start(); // When webpage is done loading, run the 'startWebRtc()' function.
-//Can't run automatically now as AudoContext cannot load without user input :/
+function micCheck(){
+    // Check if window.showAudioWarning is True, if so don't autorun start() and show needMicModal    
+    if (window.showAudioWarning == 'True') {
+        document.getElementById('needMicModal').style.display = 'block'
+    }
+    else if (window.showAudioWarning == 'False') {
+        start()
+    }
+    
+}
+
+// When window has loaded all resources
+window.onload = micCheck(); // When webpage is done loading, run the 'micCheck()' function.

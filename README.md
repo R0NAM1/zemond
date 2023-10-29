@@ -30,5 +30,7 @@ Zemond is great for the home, buisness or any other place that needs security. T
 - Plugins for (AI detection, license plate detection, other behaviors), just ran as a seperate thread definition.
 - Custom video element controls
 - Docker swarm integration so we can have multiple nodes for distributed processing
+- Kill user cookies after an hour or configurable unless designated as monitor
+- Premade groups for use immediently
 
 (Snapshots and promo crap, reference other git repos)
