@@ -251,18 +251,22 @@ def sendPacket(payload):
     rtspSocket.send(payload.encode())
     return rtspSocket.recv(4096).decode("UTF-8")
 
+# When we want to stream out webrtc buffer to the camera, if any exceptions, break from while True loop
 async def streamBufferToRemote(username, password, cameraIP, port, slashAddress, webrtcpeer):
     try:
+        # Send RTSP handshake so we can blast RTP
         await handleRTSPtoGetRTP(cameraIP, port, slashAddress, "zemond/1.0", username, password)
         
+        # Set buffer to send to FFMPEG
         frontBuffer = BytesIO()
         
+        # Get our recevier for two way audio
         receiver = webrtcpeer.getReceivers()[1]
         
-        relay = MediaRelay()
+        # Get track from receiver
         audioTrack = receiver.track
-        proxy_track = relay.subscribe(audioTrack)
         # The gold, ffmpeg command to take in my chucnk buffer and deliver it to my camera
+        # Takes a second to process and start, but is fast once started
         command = " ".join([
             "ffmpeg",
             "-re",
@@ -276,29 +280,31 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
             "-filter:a", """volume=-10dB""", 
             "-ar", "8000",
             "-ac", "1",
+            "-bufsize", " 3000k",
             "-f", "rtp",
             "rtp://{0}:{1}?localrtpport=14368&localrtcpport=14369'".format(cameraIP, remotePortsExtract2[0])
         ])
-                        
+        
+        # Loop to grab latest data from webrtc track and throw into pipe
         async def updateAudioBufferLoop():
             try:
-                doOnce = False;
                 while True:
                     try:
+                        # Try to grab frame
                         audioFrame = await audioTrack.recv()
+                        # Break if no data
                         if audioFrame is None:
-                            print("NO AUDIO")
                             break
                         # Grab latest audioframe, stuff into buffer and write to process stdin
                         frontBuffer = (audioFrame.to_ndarray().tobytes())
                         process.stdin.write(frontBuffer)
-                        # if doOnce == False:
-                        #     print("Wrote first buffer to ffmpeg")
-                        #     doOnce = True
                     except Exception as e:
-                        print("Error In Retrieving WebRTC Incoming Audio Data, exception follows: " + str(e))
+                        # print("Exception")
+                        # Close ffmpeg process
                         process.stdin.close()
                         await process.wait()
+                        # Break from loop
+                        break
                         
             except asyncio.CancelledError:
                 # print('updateBufferLoop cancelled, kill process')
@@ -306,19 +312,24 @@ async def streamBufferToRemote(username, password, cameraIP, port, slashAddress,
                 process.send_signal(signal.SIGINT)                    
                 process.stdin.close()
                 
+        # Create ffmpeg process
         process = await asyncio.create_subprocess_exec(*command.split(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
+        # Start process
         update_task = asyncio.create_task(updateAudioBufferLoop())
         
-        # Keep task running
+        # Keep task and process alive
         await process.wait()
 
     except asyncio.CancelledError:
         # print("Should Be Cancelled")
-        update_task.cancel()
-        await update_task
+        try:
+            update_task.cancel()
+            await update_task
+        except:
+            pass
         # print("Process Closed")
-        raise    
+        # raise    
         
 def describePROBE(username, password, ip, port, slashAddress, userAgent):  
     hasTWA = False
