@@ -4,7 +4,7 @@ import { stunServer } from '/static/js/stunServer.js';
 // You just include it and it does the rest.
 // Import Stun Server URL from seperate JS file
 
-var pc = null;
+var pc = null, dcInterval = null;
 
 // In this file, create the elements from the db by taking the lxw, multiplying a div that contains a video element that connects to any video that way said.
 // Then run modified webrtc connection script, for now just make text elements
@@ -12,6 +12,60 @@ var pc = null;
 async function negotiate() {
     // Send offer to server for WebRTC
     return pc.createOffer({iceRestart:true}).then(function(offer) {
+
+        // Forcefully change the SDP pref from Vp8 to H264
+
+        // offer.sdp = offer.sdp.replaceAll('VP9', 'H264')
+
+        // Remove other lines
+        // let splitSdp = offer.sdp.split('\r\n');
+
+        // // Store track ID to remove from m=video
+        // let trackIdStore = []
+
+        // for (let i = 0; i < splitSdp.length; i++) {
+        //     if (splitSdp[i].includes('a=rtpmap') && splitSdp[i].includes('VP8')) {
+        //         //Grab Id
+        //         let id = splitSdp[i].split(":")
+        //         id = id[1].split(' ')[0]
+        //         trackIdStore.push(id)
+
+        //         // splitSdp.splice(i, 1);
+        //         // i--;
+        //     }
+        //     else if (splitSdp[i].includes('a=rtpmap') && splitSdp[i].includes('rtx')) {
+        //         //Grab Id
+        //         let id = splitSdp[i].split(":")
+        //         id = id[1].split(' ')[0]
+        //         trackIdStore.push(id)
+                
+        //         splitSdp.splice(i, 1);
+        //         i--;
+        //     }
+        // }
+
+        // // Find m=video in splitSdp and remove IDS
+
+        // for (let i = 0; i < splitSdp.length; i++) {
+        //     if (splitSdp[i].includes('m=video')) {
+        //         console.log("Before:")
+        //         console.log(splitSdp[i])
+        //         for (let id of trackIdStore) {
+        //             console.log("Replacing track ID " + id)
+        //             splitSdp[i] = splitSdp[i].replace(id, "")
+        //         }
+        //         console.log("After:")
+        //         console.log(splitSdp[i])
+        //     }
+        
+        // }
+
+        // offer.sdp = splitSdp.join('\r\n')
+
+        // offer.sdp = offer.sdp.replaceAll('VP8', 'H264')
+        // offer.sdp = offer.sdp.replaceAll('VP8', 'H264')
+
+
         return pc.setLocalDescription(offer); // I am the offer.
     }).then(function() {
         // wait for ICE gathering to complete

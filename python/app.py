@@ -1,4 +1,5 @@
-import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, dockerComposer # Have to import for just firstRun because of global weirdness
+import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, signal, dockerComposer # Have to import for just firstRun because of global weirdness
+import tracemalloc
 from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response
 from flask_sock import Sock
 from flask_login import LoginManager, UserMixin, login_user, current_user
@@ -19,13 +20,14 @@ from aiortc.rtcrtpsender import RTCRtpSender
 #import Zemond Specific Parts
 from onvifRequests import *
 from onvifAutoConfig import onvifAutoconfigure
-from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, userUUIDAssociations
+from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, userUUIDAssociations, sigint
 from dockerComposer import addRunningContainer, dockerWatcher, removeContainerCompletely, firstRunDockerCheck
 from ptzHandler import readPTZCoords, sendContMovCommand, sendAuthenticatedPTZContMov, updatePTZReadOut
 from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 from permissionTree import permissionTreeObject
 from webRtc import singleWebRtcStart, monWebRtcStart
+from webRtcObjects import cameraPlayerWatchdog
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
@@ -33,10 +35,11 @@ login_manager.init_app(app)
 
 app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practice, generate some random hash string.
 
-app.config.update(
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_SAMESITE='None',
-)
+
+# app.config.update(
+#     SESSION_COOKIE_SECURE=True,
+#     SESSION_COOKIE_SAMESITE='None',
+# )
 
 # Customer User object that Flask_login requires, just takes a string and returns it as self.username (User(username))
 # Also returns other flaskio funnies, is_active True, is_anon False, I handle all that logic.
@@ -52,14 +55,30 @@ class User(UserMixin):
     def get_id(self):
         return self.username
 
-global snapshotCache, userUUIDAssociations;
+global snapshotCache, userUUIDAssociations, sigint;
 
 
-release_id = 'Alpha 0.0.1'
+release_id = 'Alpha 0.5.0'
 
 commit_id = ''
 
 # ONVIF URL STANDARD: http(s)://ip.address/onvif/device_serivce 
+
+def sigint_handler(signum ,frame):
+    print("SIGINT Received, exiting...")
+    # Kill all UUID webrtc live events
+    
+    global sigint;
+    sigint = True
+    
+    for uuid in userUUIDAssociations:
+        iLoop = userUUIDAssociations[uuid][2]
+        iLoop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
+        time.sleep(1) # Wait one seconds for code to stop executing...
+        iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
+        del userUUIDAssociations[uuid]
+    
+    sys.exit(0)
 
 def setCommitID():
     global commit_id
@@ -71,7 +90,6 @@ def setCommitID():
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
-        # print(str(session))
         if 'logged_in' in session:
             return f(*args, **kwargs)
         else:
@@ -110,8 +128,9 @@ def login():
                 # Set logged_in to true so can access any page
                 session['logged_in'] = True
                 session.pop('_flashes', None)
+                print(session)
                 flash('Your logged in!')
-                return redirect(url_for('index'))
+                return redirect(url_for('dashboard'))
             else:
                 session.pop('_flashes', None)
                 flash('Username or Password is incorrect!')
@@ -870,35 +889,42 @@ def uuidWatchdog():
     global userUUIDAssociations
     
     while True:
-        # Check every second
-        time.sleep(1)
-        # print(userUUIDAssociations)
-
-        # Loop through each UUID and check Pingtime
-        for uuid in userUUIDAssociations:
-            # print("Check UUID: " + uuid)
-            iPingtime = userUUIDAssociations[uuid][1]
-            # print("Found Pingtime: " + str(iPingtime))
-            diffTime = float(time.time()) - float(iPingtime)
-            # print("Diff time:" + str(diffTime))
+        
+        if sigint == False:
             
-            if (diffTime > 5.0 and iPingtime > 0):
-                iLoop = userUUIDAssociations[uuid][2]
-                print("Running Threads Before: " + str(active_count()))
-                iLoop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
-                time.sleep(3) # Wait three seconds for code to stop executing...
-                iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
-                print("Running Threads After: " + str(active_count()))
-                print("Broken Watchdog, killing loop uuid: " + str(uuid))
-                # Remove from userUUIDAssociations
-                del userUUIDAssociations[uuid]
-                break
+            # Check every second
+            time.sleep(1)
+            # print(userUUIDAssociations)
+
+            # Loop through each UUID and check Pingtime
+            for uuid in userUUIDAssociations:
+                              
+                # print("Check UUID: " + uuid)
+                iPingtime = userUUIDAssociations[uuid][1]
+                # print("Found Pingtime: " + str(iPingtime))
+                diffTime = float(time.time()) - float(iPingtime)
+                # print("Diff time:" + str(diffTime))
+                                
+                if (diffTime > 5.0 and iPingtime > 0):
+                    print("Broken Watchdog, killing loop uuid: " + str(uuid))                  
+                    print("Running Threads Before: " + str(active_count()))
+                    (userUUIDAssociations[uuid][2].stop()) # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
+                    
+                    time.sleep(3)
+
+                    userUUIDAssociations[uuid][2].close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
+                                        
+                    print("Running Threads After: " + str(active_count()))
+                    # Remove from userUUIDAssociations
+                    del userUUIDAssociations[uuid]
+                    break
+        else:
+            break;
         
 # When we grab a WebRTC offer from out browser client for single camera.
 @app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
 def webRTCOFFER(cam):
-    
     thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
     
     # Get current user (Static currently)
@@ -914,24 +940,18 @@ def webRTCOFFER(cam):
 
     # Always create a new event loop for this session.
     rtcloop = asyncio.new_event_loop()
-    asyncio.set_event_loop(rtcloop)
-        
-    # Not sure if I'd be able to replace this, but should be fine as is.
-    parsedSDP = rtcloop.run_until_complete(singleWebRtcStart(thisUUID, dockerIPString, cam, request))
     
-    # Now create a timer that is reset by Ping-Pong.
-
     # Add generated info to userUUIDAssociation
     # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, cam]
 
+    # Get SDP from client and set set objects
+    parsedSDP = userUUIDAssociations[thisUUID][2].run_until_complete(singleWebRtcStart(thisUUID, dockerIPString, cam, request))
     
     # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # Another thread so we don't block the code.
-    webRTCThread = Thread(target=rtcloop.run_forever)
+    webRTCThread = Thread(target=userUUIDAssociations[thisUUID][2].run_forever)
     webRTCThread.start()
-  
-    # print("Current Number Of Running Threads: " + str(active_count()))
     
     # Return Our Parsed SDP to the client
     return parsedSDP.encode()
@@ -940,7 +960,6 @@ def webRTCOFFER(cam):
 @app.route('/monitors/offer/<monitor>', methods=['GET', 'POST'])
 @login_required
 def offer_monitor(monitor):
-    
     thisUUID = str(uuid.uuid4()) # Generate a UUID for this session.
     
     # Get current user (Static currently)
@@ -976,16 +995,15 @@ def offer_monitor(monitor):
         
     # Create a new event loop for this session. Allows for us to continue code, but also get a response from the client sdp
     rtcloop = asyncio.new_event_loop()
-    asyncio.set_event_loop(rtcloop)
         
-    # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
-    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray))
-    
     # # # Now create a timer that is reset by Ping-Pong.
     # Add generated info to userUUIDAssociation
     # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, monitor]
 
+    # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
+    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray))
+    
     
     # # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # # Another thread so we don't block the code.
@@ -1043,63 +1061,62 @@ def deleteCamera():
 def updateSnapshots():
 
     while True:
-        # This runs infinitly in another thread at program start,
-        # this gets a list of all the cameras, creates a string for each of them, (A Dictionary), then gets
-        # a snapshot of it, and stores it. They can be called anytime.
-
-        myCursor.execute("Select * from localcameras")
-        localcameras = myCursor.fetchall()
-
-        global snapshotCache
-        global onlineCameraCache
-        # Reset Temp Cache
-
-        tempCache = {}
-        tmpCameraCache = 0
-
-        for row in localcameras:
-            # Get Current Name
-            currentiname = row[0]
-            # Get Current IP
-            dockerIP = row[10]
-            # First Generate Snapshot, from docker container
         
-            # Assemble Credential Based RTSP URL
-            dockerRtspUrl = ("rtsp://" + dockerIP + ":8554/cam1")
-            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
-            cap = cv2.VideoCapture(dockerRtspUrl)
+        if sigint == False:
+            # This runs infinitly in another thread at program start,
+            # this gets a list of all the cameras, creates a string for each of them, (A Dictionary), then gets
+            # a snapshot of it, and stores it. They can be called anytime.
 
-            if not cap.isOpened():
-                # print('Cannot open RTSP stream')
-                # Assuming that docker container isn't started, just break the loop then try again.
-                break
-            else:
-                readquestion, frame = cap.read()
-                # print("Got Snapshot for " + currentiname)
-                # This means the camera is online, to put it simply. Add this to a counter.
-                tmpCameraCache = tmpCameraCache + 1
-                cap.release()
+            myCursor.execute("Select * from localcameras")
+            localcameras = myCursor.fetchall()
 
-            try:
-                _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
-            except:
-                break
-            im_bytes = im_arr.tobytes()
-            im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
+            global snapshotCache
+            global onlineCameraCache
+            # Reset Temp Cache
 
-            # Add data to dictionary as Name : IMG
-            tempCache[currentiname]=im_b64
+            tempCache = {}
+            tmpCameraCache = 0
 
-        snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
-        onlineCameraCache = tmpCameraCache;
-        print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
-        time.sleep(8) # Time to wait between gathering snapshots
-        # # Task Check
-        # loop = asyncio.new_event_loop()
-        # asyncio.set_event_loop(loop)
-        # tasks = asyncio.all_tasks(loop)
-        # for task in tasks:
-        #     print("Print Task: " + str(task))
+            for row in localcameras:
+                # Get Current Name
+                currentiname = row[0]
+                # Get Current IP
+                dockerIP = row[10]
+                # First Generate Snapshot, from docker container
+            
+                # Assemble Credential Based RTSP URL
+                dockerRtspUrl = ("rtsp://" + dockerIP + ":8554/cam1")
+                os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
+                cap = cv2.VideoCapture(dockerRtspUrl)
+
+                if not cap.isOpened():
+                    # print('Cannot open RTSP stream')
+                    # Assuming that docker container isn't started, just break the loop then try again.
+                    break
+                else:
+                    readquestion, frame = cap.read()
+                    # print("Got Snapshot for " + currentiname)
+                    # This means the camera is online, to put it simply. Add this to a counter.
+                    tmpCameraCache = tmpCameraCache + 1
+                    cap.release()
+
+                try:
+                    _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
+                except:
+                    break
+                im_bytes = im_arr.tobytes()
+                im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
+
+                # Add data to dictionary as Name : IMG
+                tempCache[currentiname]=im_b64
+
+            snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
+            onlineCameraCache = tmpCameraCache;
+            print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
+            print("Is sigint? " + str(sigint))
+            time.sleep(8) # Time to wait between gathering snapshots
+        else:
+            break;
 
 def startWebClient():
     # Testing Web Server
@@ -1110,6 +1127,10 @@ def startWebClient():
     serve(app, host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
+    # For when needed
+    # tracemalloc.start()
+    
+    os.environ['PYAV_LOGGING'] = 'off'
     
     setCommitID()
     
@@ -1126,8 +1147,8 @@ if __name__ == '__main__':
         time.sleep(5)
 
     if (dockerComposer.firstRunDockerCheck == True):
-        print("Docker check True! Start Web Interface in 10 seconds")
-          # Start Snapshot Thread.
+        print("Docker check True! Start Web Interface in 5 seconds")
+        # Start Snapshot Thread.
         snapshotThread = Thread(target=updateSnapshots)
         snapshotThread.start()
         
@@ -1135,6 +1156,9 @@ if __name__ == '__main__':
         uuidWatchdog = Thread(target=uuidWatchdog) # Create a watchdog that takes the UUID and Event Loop
         uuidWatchdog.start()
         
-        # Wait 10 seconds
-        time.sleep(10)
+        # Register SIGINT Handler
+        signal.signal(signal.SIGINT, sigint_handler)
+        
+        # Wait 5 seconds
+        time.sleep(5)
         startWebClient()

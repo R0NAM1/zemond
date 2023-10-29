@@ -3,10 +3,10 @@ import json
 # This is the docker composer! This is the file that handles all the logic for manipulating docker-compose.yml 
 # and starting or stopping docker containers!
 
-from globalFunctions import myCursor, myDatabase, passwordRandomKey
+from globalFunctions import myCursor, myDatabase, passwordRandomKey, sigint
 import docker, os, time, cryptocode
 
-global firstRunDockerCheck
+global firstRunDockerCheck, sigint
 firstRunDockerCheck = False;
 
 dockerClient = docker.from_env()
@@ -74,103 +74,106 @@ def dockerWatcher():
         print("Couldn't find a PiD File For Docker! Is it running...?")
 
     while True:
-        # print("Checking If All Proper Containers Are Running...")
-
-        # Go through each entry in the DB and make sure the corosponding container is running
-        myCursor.execute("Select name, dockerIP from localcameras")
-        camdump = myCursor.fetchall()
-        camnames = []
-        camips = []
         
-        for name, ip in camdump:
-            camnames.append(name)
-            camips.append(ip)
+        if sigint == False:
+            # print("Checking If All Proper Containers Are Running...")
 
-        cameraDBIP = ''
-
-        for camera in camnames:
-            cameraNameHash = camera.replace(" ", "-")
-            # print("Checking container associated with " + cameraNameHash)
-
-            # Get Database IP associated
-                
-            for name, ip in camdump:
-                if name == camera:
-                    cameraDBIP = ip
+            # Go through each entry in the DB and make sure the corosponding container is running
+            myCursor.execute("Select name, dockerIP from localcameras")
+            camdump = myCursor.fetchall()
+            camnames = []
+            camips = []
             
-            # Get list of all existing docker containers:
-            containers = [container.name for container in (dockerClient.containers.list(all=True))]
+            for name, ip in camdump:
+                camnames.append(name)
+                camips.append(ip)
 
-            # print(containers)
+            cameraDBIP = ''
 
-            # camera[0] needs to have 'spaces' replaced with '-' for docker container names
+            for camera in camnames:
+                cameraNameHash = camera.replace(" ", "-")
+                # print("Checking container associated with " + cameraNameHash)
 
-
-            # Check If Containers Exist
-            if cameraNameHash in containers:
+                # Get Database IP associated
+                    
+                for name, ip in camdump:
+                    if name == camera:
+                        cameraDBIP = ip
                 
-                # print("Docker Container Exists! Checking if its running...")
-                iContainer = dockerClient.containers.get(cameraNameHash)
-                container_state = iContainer.attrs['State']
+                # Get list of all existing docker containers:
+                containers = [container.name for container in (dockerClient.containers.list(all=True))]
 
-                if container_state['Status'] == 'running':
-                    # print(cameraNameHash + " is Running! Checking if IP Matches database record...")
-                    # Now check if IP matches
-                    if ((iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress']) == cameraDBIP):
-                        # print("Camera DB and IP Match, nothing to do! \n \n")
-                        pass
+                # print(containers)
+
+                # camera[0] needs to have 'spaces' replaced with '-' for docker container names
+
+
+                # Check If Containers Exist
+                if cameraNameHash in containers:
+                    
+                    # print("Docker Container Exists! Checking if its running...")
+                    iContainer = dockerClient.containers.get(cameraNameHash)
+                    container_state = iContainer.attrs['State']
+
+                    if container_state['Status'] == 'running':
+                        # print(cameraNameHash + " is Running! Checking if IP Matches database record...")
+                        # Now check if IP matches
+                        if ((iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress']) == cameraDBIP):
+                            # print("Camera DB and IP Match, nothing to do! \n \n")
+                            pass
+                        else:
+                            containerIP = (iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress'])
+                            # print("Did Not Match: DBIP:" + cameraDBIP + ": UPDATE dockerIP ON DATABASE TO: " + str(containerIP))
+                            myCursor.execute("UPDATE localcameras SET dockerIP='{0}' WHERE name = '{1}'".format(containerIP, camera))
+                            myDatabase.commit()
                     else:
+                        iContainer.start()
+                        # Wait 5 seconds for container to start
+                        time.sleep(5)
+
+                        iContainer.reload()
+                        # We also need to update the IP here
                         containerIP = (iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress'])
-                        # print("Did Not Match: DBIP:" + cameraDBIP + ": UPDATE dockerIP ON DATABASE TO: " + str(containerIP))
+
+                        print("Starting Docker Container: " + cameraNameHash + " :updating database record IP to " + containerIP) 
+                        
                         myCursor.execute("UPDATE localcameras SET dockerIP='{0}' WHERE name = '{1}'".format(containerIP, camera))
                         myDatabase.commit()
+
                 else:
-                    iContainer.start()
-                    # Wait 5 seconds for container to start
-                    time.sleep(5)
-
-                    iContainer.reload()
-                    # We also need to update the IP here
-                    containerIP = (iContainer.attrs['NetworkSettings']["Networks"]["zemond-nat"]['IPAddress'])
-
-                    print("Starting Docker Container: " + cameraNameHash + " :updating database record IP to " + containerIP) 
+                    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(camera))
+                    currentiurl = myCursor.fetchone()
+                    currentiurlString = ''.join(currentiurl)
+                    # Get Current Camera's Username
+                    myCursor.execute("Select username from localcameras where name='{0}'".format(camera))
+                    currentiusername = myCursor.fetchone()
+                    currentiusernameString = ''.join(currentiusername)
+                    # Get Current Camera's Password
+                    myCursor.execute("Select password from localcameras where name='{0}'".format(camera))
+                    currentipassword = myCursor.fetchone()
+                    currentipasswordString = ''.join(currentipassword)
+                    myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(camera))
+                    rtspurl =  myCursor.fetchone()
+                    rtspurl =  ''.join(rtspurl)
+                    rtspurl2 = rtspurl.replace("rtsp://", "")
+                    ip, port = rtspurl2.split(":", 1)
+                    port = port.split("/", 1)[0]
+                    address, params = rtspurl.split("/cam", 1)
+                    rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
+                                
+                                
+                    # Create Container if it does not exist
+                    # addRunningContainer(camera, rtspCredString, "268435456", "48")
                     
-                    myCursor.execute("UPDATE localcameras SET dockerIP='{0}' WHERE name = '{1}'".format(containerIP, camera))
-                    myDatabase.commit()
+            # For first run, set var to show containers have been checked.
+            global firstRunDockerCheck
+            firstRunDockerCheck = True
+            # print("SETTING firstRunDockerCheck TO TRUE: " + str(firstRunDockerCheck))
 
-            else:
-                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(camera))
-                currentiurl = myCursor.fetchone()
-                currentiurlString = ''.join(currentiurl)
-                # Get Current Camera's Username
-                myCursor.execute("Select username from localcameras where name='{0}'".format(camera))
-                currentiusername = myCursor.fetchone()
-                currentiusernameString = ''.join(currentiusername)
-                # Get Current Camera's Password
-                myCursor.execute("Select password from localcameras where name='{0}'".format(camera))
-                currentipassword = myCursor.fetchone()
-                currentipasswordString = ''.join(currentipassword)
-                myCursor.execute("Select rtspurl from localcameras where name='{0}'".format(camera))
-                rtspurl =  myCursor.fetchone()
-                rtspurl =  ''.join(rtspurl)
-                rtspurl2 = rtspurl.replace("rtsp://", "")
-                ip, port = rtspurl2.split(":", 1)
-                port = port.split("/", 1)[0]
-                address, params = rtspurl.split("/cam", 1)
-                rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
-                            
-                            
-                # Create Container if it does not exist
-                # addRunningContainer(camera, rtspCredString, "268435456", "48")
-                
-        # For first run, set var to show containers have been checked.
-        global firstRunDockerCheck
-        firstRunDockerCheck = True
-        # print("SETTING firstRunDockerCheck TO TRUE: " + str(firstRunDockerCheck))
-
-        # Wait 5 seconds to re-check if containers exist
-        time.sleep(5)
-
+            # Wait 5 seconds to re-check if containers exist
+            time.sleep(5)
+        else:
+            break;
 
 
 def removeContainerCompletely(cameraName):

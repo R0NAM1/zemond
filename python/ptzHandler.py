@@ -87,7 +87,9 @@ async def updatePTZReadOut(rtcPeer, cameraName, channel_object):
         
         # Publish Here
         try:
-            channel_object.send('ptzcoordupdate|' +str(ptzcoords))
+            if rtcPeer.sctp.state == 'connected':
+                channel_object.send('ptzcoordupdate|' +str(ptzcoords))
+                
         except:
             # Assume channel closed, return.
             return

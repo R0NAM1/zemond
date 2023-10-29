@@ -2,7 +2,7 @@ So you actually wanna use this program, eh?
 To do that solve these riddle three:
 
 HOW TO SETUP THE ZEMOND SECURITY PROGRAM
-===R0NAM1 2022===
+===R0NAM1 2023===
 
 You can either setup Zemond on a Bare Metal host or a virtual machine, it's not picky.
 Recommended to use Debian, GUI optional.
@@ -26,11 +26,19 @@ Beacause docker containers run under nat, unless explicitly stated to forward po
 
 7. We now need to build the base Docker Container that will host the camera, this can be done by running 'docker build . --tag zemond/cameramain:v1.0'
 
-8. We also need to use a STUN server for client connectivity, APT has a coturn package you can use, whichever way you decide to implement a STUN server or a TURN server, you need to set it in two places: app.py and webrtc-client.js
+8. We also need to use a STUN server for client connectivity, APT has a coturn package you can use, whichever way you decide to implement a STUN server or a TURN server, you need to set it in two places: python/webrtc.py and python/static/js/stunServer.js
 In both search for the string 'nvr.internal.my.domain' and set it to your specific STUN server.
+
+9. Replace app.secret_key = 'IShouldBeUnique!' to a randomly generated string, use openssl as such:
+'openssl rand -hex 40', using 40 characters to be more unique
+
+Remember, YOU are responsible for the Operating System Security, Network Security and ALL attack vectors. Dosen't matter how well a program is made if you don't secure any path to it.
+Security is layed.
 
 
 # TODO
+
+Figure out systemd process, make install script for that.
 
 To test the server, run 'python3 app.py'
 
@@ -39,3 +47,8 @@ To test the server, run 'python3 app.py'
 Make Admin user for permission editing, users cannot edit their own perms, so make a specific super account
 for that specific user. Seperate permissions. Ideally user-perm accounts only can access manage_perms, every
 other account cant.
+
+FOR USE IN FIREFOX, go to about:config and set the following:
+- media.navigator.mediadatadecoder_vp8_hardware_enabled = true
+- media.peerconnection.video.vp9_preferred = true
+- media.webrtc.hw.h264.enabled = false
