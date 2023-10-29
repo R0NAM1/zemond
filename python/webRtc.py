@@ -6,7 +6,7 @@ from aiortc.rtcrtpsender import RTCRtpSender
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, userUUIDAssociations
 from ptzHandler import updatePTZReadOut, sendAuthenticatedPTZContMov
 from twoWayAudio import streamBufferToRemote
-from webRtcObjects import CameraPlayer, CameraPlayerTrack, cameraPlayerDictionary
+from webRtcObjects import CameraPlayer, AudioCameraPlayerTrack, VideoCameraPlayerTrack, cameraPlayerDictionary
 
 global userUUIDAssociations
 
@@ -46,8 +46,8 @@ async def singleWebRtcStart(thisUUID, dockerIP, cameraName, request):
     cameraPlayer = requestCameraPlayer(dockerIP)
 
     # Create tracks to tie to transceivers
-    camAudioTrack = CameraPlayerTrack(cameraPlayer, 'audio', thisUUID)
-    camVideoTrack = CameraPlayerTrack(cameraPlayer, 'video', thisUUID)
+    camAudioTrack = AudioCameraPlayerTrack(cameraPlayer, thisUUID)
+    camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, thisUUID)
     
     if (camVideoTrack):
         webRtcPeer.addTransceiver(camVideoTrack, direction='sendonly')
@@ -244,7 +244,7 @@ async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray):
     for i, cam in enumerate(formatCamArray):
 
         cameraPlayer = requestCameraPlayer(dockerIpArray[i])
-        camVideoTrack = CameraPlayerTrack(cameraPlayer, 'video', thisUUID)
+        camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, 'video', thisUUID)
                 
         if (camVideoTrack):
             webRtcPeer.addTransceiver(camVideoTrack, direction='sendonly')

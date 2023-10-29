@@ -10,46 +10,32 @@ cameraPlayerDictionary = {}
 # Set AV logging, useful for if a stream is erroring for some reason, usually redundant
 # av.logging.set_level(av.logging.PANIC)
 
-class CameraPlayerTrack(MediaStreamTrack):
+class VideoCameraPlayerTrack(MediaStreamTrack):
     # This track is made in webRtc.py and accepts the CameraPlayer object to read buffer from
-    def __init__(self, cameraplayer, kind, uuid):
+    def __init__(self, cameraplayer, uuid):
         super().__init__() # Init Class
         self.cameraplayer = cameraplayer # CameraPlayer reference
-        self.kind = kind # Video or audio?
-        self.lb = None # Last recv frame
-        self._id = 'cameraplayertrack.' + str(kind) + '.' + str(uuid) # Semi Custom ID
-                
+        self.kind = 'video' # Video or audio?
+        self._id = 'cameraplayertrack.video.' + str(uuid) # Semi Custom ID
     # Consumer wants frame, get latest from CameraPlayer, or return blank.
     async def recv(self):
-        # Don't async wait for latest frame, instead if I have a frameBuffer and it is not the last frame I processed, or return last frame
-        if self.kind == 'video':
-            if (self.cameraplayer.videoFrameBuffer is not None) and (self.cameraplayer.videoFrameBuffer is not self.lb):
-                self.lb = self.cameraplayer.videoFrameBuffer
-                return self.cameraplayer.videoFrameBuffer
-            elif self.cameraplayer.videoFrameBuffer is None:
-                # print("Sending Blank Video Frame")
-                frame = VideoFrame(width=1280, height=720)
-                frame.pts = 0
-                frame.time_base = '1/90000'
-                return frame
-            else:
-                # print("Resend Video")
-                return self.lb
-            
-        # If I want audio
-        elif self.kind == 'audio':
-            if (self.cameraplayer.audioFrameBuffer is not None) and (self.cameraplayer.audioFrameBuffer is not self.lb):
-                self.lb = self.cameraplayer.audioFrameBuffer
-                return self.cameraplayer.audioFrameBuffer
-            elif self.cameraplayer.audioFrameBuffer is None:
-                # print("Sending Blank Audio Frame")
-                frame = AudioFrame(samples=960)
-                frame.pts = 0
-                frame.rate = 48000
-                return frame
-            else:
-                # print("Resend Audio")
-                return self.lb
+        return self.cameraplayer.videoFrameBuffer
+
+               
+           
+               
+class AudioCameraPlayerTrack(MediaStreamTrack):
+    # This track is made in webRtc.py and accepts the CameraPlayer object to read buffer from
+    def __init__(self, cameraplayer, uuid):
+        super().__init__() # Init Class
+        self.cameraplayer = cameraplayer # CameraPlayer reference
+        self.kind = 'audio' # Video or audio?
+        self._id = 'cameraplayertrack.audio.' + str(uuid) # Semi Custom ID
+    # Consumer wants frame, get latest from CameraPlayer.
+    async def recv(self):
+        return self.cameraplayer.audioFrameBuffer
+
+
                       
 # Modified Media Player
 class CameraPlayer():
@@ -57,12 +43,17 @@ class CameraPlayer():
         self.__container = av.open(file="rtsp://" + dockerIp + ":8554/cam1", mode="r", options={'hwaccel': 'auto'}) # Open Cam Stream
         self.__thread: Optional[threading.Thread] = None # Thread to get frames
         self.__thread_quit: Optional[threading.Event] = None # Thread end event
-
+        vFrame = VideoFrame(width=1280, height=720)
+        vFrame.pts = 0
+        vFrame.time_base = '1/90000'
+        aFrame = AudioFrame(samples=960)
+        aFrame.pts = 0
+        aFrame.rate = 48000
         # Examine streams
         self.__streams = [] # Streams in container, audio and video
         self.__decode = decode # Always decode
-        self.audioFrameBuffer: Optional[AudioFrame] = None # Init public buffer to one type
-        self.videoFrameBuffer: Optional[VideoFrame] = None
+        self.audioFrameBuffer: Optional[AudioFrame] = aFrame # Init public buffer to one type
+        self.videoFrameBuffer: Optional[VideoFrame] = vFrame
         self._parasites = 0
         
         # For loop that opens each data stream in av.container
