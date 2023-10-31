@@ -1,0 +1,17 @@
+body.hide-cursor {
+    cursor: none;
+  }
+
+#exitButton {
+    position: fixed;
+    top: 0;
+    left: 0;
+    margin-top: 15px;
+    margin-left: 15px;
+    opacity: 60%;
+    display: none;
+}
+
+#exitButton:hover {
+    cursor: pointer;
+}

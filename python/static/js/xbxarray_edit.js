@@ -58,7 +58,6 @@ function takexxGenCamSelectArray() {
 function loadSettingsFromDB() {
     var x1 = document.getElementById("x1");
     var x2 = document.getElementById("x2");
-    var sbox = document.getElementById("secondbox");
 
     // Take current settings and parse them to existing elements.
     if (loadedMonInfo == "False") {
@@ -84,10 +83,6 @@ function loadSettingsFromDB() {
         // Load xbx into x1 and x2
         x1.value = x[0]
         x2.value = x[1]
-
-        // Load seconds into DOM
-        sval = (loadedMonInfo[1].replace("s", ""));
-        sbox.value = sval;
 
         // Load elements based on selection, now that it's set:
         takexxGenCamSelectArray();
@@ -115,7 +110,6 @@ function submitDataToDatabase() {
     // Get Values
     var x1 = document.getElementById("x1").value;
     var x2 = document.getElementById("x2").value;
-    var sbox = document.getElementById("secondbox").value;
     var sendslotlist = [];
     var monitorName = (window.location.href).split("/");
     monitorName = (monitorName[monitorName.length - 1]);
@@ -127,11 +121,11 @@ function submitDataToDatabase() {
     
     }
 
-    console.log(sbox)
+    
 
-    if (sbox == "") {
-        sbox = 0
-    }
+   
+    sbox = 0
+    
 
     // Create value string in order
     //lengthbywidthnum, timeinfo, camarray

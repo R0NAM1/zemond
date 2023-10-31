@@ -13,59 +13,6 @@ async function negotiate() {
     // Send offer to server for WebRTC
     return pc.createOffer({iceRestart:true}).then(function(offer) {
 
-        // Forcefully change the SDP pref from Vp8 to H264
-
-        // offer.sdp = offer.sdp.replaceAll('VP9', 'H264')
-
-        // Remove other lines
-        // let splitSdp = offer.sdp.split('\r\n');
-
-        // // Store track ID to remove from m=video
-        // let trackIdStore = []
-
-        // for (let i = 0; i < splitSdp.length; i++) {
-        //     if (splitSdp[i].includes('a=rtpmap') && splitSdp[i].includes('VP8')) {
-        //         //Grab Id
-        //         let id = splitSdp[i].split(":")
-        //         id = id[1].split(' ')[0]
-        //         trackIdStore.push(id)
-
-        //         // splitSdp.splice(i, 1);
-        //         // i--;
-        //     }
-        //     else if (splitSdp[i].includes('a=rtpmap') && splitSdp[i].includes('rtx')) {
-        //         //Grab Id
-        //         let id = splitSdp[i].split(":")
-        //         id = id[1].split(' ')[0]
-        //         trackIdStore.push(id)
-                
-        //         splitSdp.splice(i, 1);
-        //         i--;
-        //     }
-        // }
-
-        // // Find m=video in splitSdp and remove IDS
-
-        // for (let i = 0; i < splitSdp.length; i++) {
-        //     if (splitSdp[i].includes('m=video')) {
-        //         console.log("Before:")
-        //         console.log(splitSdp[i])
-        //         for (let id of trackIdStore) {
-        //             console.log("Replacing track ID " + id)
-        //             splitSdp[i] = splitSdp[i].replace(id, "")
-        //         }
-        //         console.log("After:")
-        //         console.log(splitSdp[i])
-        //     }
-        
-        // }
-
-        // offer.sdp = splitSdp.join('\r\n')
-
-        // offer.sdp = offer.sdp.replaceAll('VP8', 'H264')
-        // offer.sdp = offer.sdp.replaceAll('VP8', 'H264')
-
-
         return pc.setLocalDescription(offer); // I am the offer.
     }).then(function() {
         // wait for ICE gathering to complete
@@ -156,7 +103,6 @@ function startWebRtcStreamsAndAttatch(lxw, camarray) {
     for (let i = 0; i < Object.keys(camarray).length; i++) {
         console.log("Adding Transceivers for: " + (i+1) + ": " + Object.keys(camarray[String(i+1)]))
         pc.addTransceiver('video', {direction: 'recvonly'}); // We only receive video
-        pc.addTransceiver('audio', {direction: 'recvonly'}); // We only receive audio
     }
 
     // Negotiate clients and connect peers
@@ -211,7 +157,7 @@ export function loadMonitor() {
         templateVideo.style.width = '100%';
         templateVideo.style.height = '100%';
         templateVideo.muted = true;
-        templateVideo.poster = '/static/pictures/logo.png';
+        templateVideo.disablePictureInPicture = true;
         templateVideo.autoplay = true;
         templateVideo.style.objectFit = 'contain';
         

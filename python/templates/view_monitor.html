@@ -5,6 +5,12 @@
 
 <script type="module" src="{{url_for('static', filename='js/' + monitorjsfile + '.js')}}"></script>
 
+<div id="exitButton" onclick="window.location.href = '/monitors'">
+    <img src="{{url_for('static', filename='exit.png')}}">
+</div>
+
+<link rel="stylesheet" href="{{url_for('static', filename='css/view_monitor.css')}}">
+
 <div id="monitorbody">
 
 </div>
@@ -12,13 +18,32 @@
 <script type="module">
     import {loadMonitor} from "{{url_for('static', filename='js/' + monitorjsfile + '.js')}}";
     window.onload = loadMonitor();
+
+    
 </script>
 
 <script type="text/javascript">
+    var timer = null;
     var dbinfo = '{{ dbinfo }}';
     var camarray = '{{ camarray }}';
     var monitor = '{{ monitor }}';
     window.dbinfo = dbinfo;
     window.monitor = monitor;
     window.camarray = camarray;
+    // Register back button
+     document.addEventListener('mousemove', function() {
+        document.body.classList.remove('hide-cursor');
+        clearTimeout(timer);
+        document.getElementById('exitButton').style.display = 'block';
+
+        timer = setTimeout(function() {
+            // When mouse has not moved for one second
+            document.body.classList.add('hide-cursor');
+            document.getElementById('exitButton').style.display = 'none';
+
+        }, 1000);
+
+
+     });
+
 </script>
