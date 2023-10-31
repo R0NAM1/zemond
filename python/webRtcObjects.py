@@ -1,6 +1,6 @@
 import av, asyncio, fractions, time
 import logging as logger
-from aiortc.mediastreams import MediaStreamTrack
+from aiortc.mediastreams import MediaStreamTrack, AUDIO_PTIME
 from aiortc.contrib.media import REAL_TIME_FORMATS
 from av import VideoFrame, AudioFrame
 from threading import Thread, Event
@@ -17,6 +17,7 @@ class VideoCameraPlayerTrack(MediaStreamTrack):
         self.cameraplayer = cameraplayer # CameraPlayer reference
         self.kind = 'video' # Video or audio?
         self._id = 'cameraplayertrack.video.' + str(uuid) # Semi Custom ID
+        
     # Consumer wants frame, get latest from CameraPlayer, or return blank.
     async def recv(self):
         return self.cameraplayer.videoFrameBuffer
@@ -31,15 +32,36 @@ class AudioCameraPlayerTrack(MediaStreamTrack):
         self.cameraplayer = cameraplayer # CameraPlayer reference
         self.kind = 'audio' # Video or audio?
         self._id = 'cameraplayertrack.audio.' + str(uuid) # Semi Custom ID
+        self._bufferIndex = self.cameraplayer.audioFrameBufferIndex
+        self._firstRead = False
     # Consumer wants frame, get latest from CameraPlayer.
     async def recv(self):
-        return self.cameraplayer.audioFrameBuffer
-
-
+        # Wait so we don't overread the buffer
+        if self._firstRead == False:
+            self._firstRead = True
+            time.sleep(0.2)
+        # We read to fast, found waiting for this long keeps the reader and writers indexes pretty consistant, don't need to complicate this
+        # further! We lose about 4 frames every wrap, but is worth it.
+        time.sleep(0.021)
+        # Check if need to reset to player index, and set curr index
+        if (self.cameraplayer.audioFrameBufferEOL and self._bufferIndex != 0):
+            # If buffer rest and my index is not zero, set zero and return new frame
+            self._bufferIndex = 0
+            return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+        elif (self._bufferIndex > self.cameraplayer.audioFrameBufferIndex):
+            # If overrunning buffer, go back two frames, can likely remove though
+            #If reading above index, rewind one
+            self._bufferIndex -= 5
+            return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+        else:
+            # Get frame from buffer and increase index
+            frame = self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+            self._bufferIndex += 1
+            return frame
                       
 # Modified Media Player
 class CameraPlayer():
-    def __init__(self, dockerIp, decode=True):
+    def __init__(self, dockerIp, decode=True, newWidth=(1920), newHeight=(1080)):
         self.__container = av.open(file="rtsp://" + dockerIp + ":8554/cam1", mode="r", options={'hwaccel': 'auto'}) # Open Cam Stream
         self.__thread: Optional[threading.Thread] = None # Thread to get frames
         self.__thread_quit: Optional[threading.Event] = None # Thread end event
@@ -52,9 +74,12 @@ class CameraPlayer():
         # Examine streams
         self.__streams = [] # Streams in container, audio and video
         self.__decode = decode # Always decode
-        self.audioFrameBuffer: Optional[AudioFrame] = aFrame # Init public buffer to one type
+        self.audioFrameBuffer = [aFrame]*100 # Init public buffer to one type
+        self.audioFrameBufferIndex = 0
+        self.audioFrameBufferEOL = False
         self.videoFrameBuffer: Optional[VideoFrame] = vFrame
-        self._parasites = 0
+        self.newWidth = newWidth
+        self.newHeight = newHeight
         
         # For loop that opens each data stream in av.container
         for stream in self.__container.streams:
@@ -92,6 +117,8 @@ class CameraPlayer():
                     self,
                     self.__thread_quit,
                     self._throttle_playback,
+                    self.newWidth,
+                    self.newHeight
                 ),
             )
             self.__thread.start()
@@ -112,13 +139,26 @@ class CameraPlayer():
     #         self.__container = None
 
 # Decoder
-def player_worker_decode(loop, container, streams, cameraplayer, quit_event, throttle_playback):
+def player_worker_decode(loop, container, streams, cameraplayer, quit_event, throttle_playback, newWidth, newHeight):
     # Set audio dials
     audio_samples = 0
+    audio_sample_rate = 48000
+    audio_time_base = fractions.Fraction(1, audio_sample_rate)
     # Keeping sample bit length and sample rate, just changing formats
     audio_resampler = av.AudioResampler(
-        format="s16"
-    )
+        format="s16",
+        layout="stereo",
+        rate=audio_sample_rate,
+        frame_size=int(audio_sample_rate * AUDIO_PTIME)
+        )
+    
+    
+    vFrame = VideoFrame(width=1280, height=720)
+    vFrame.pts = 0
+    vFrame.time_base = '1/90000'
+    aFrame = AudioFrame(samples=960)
+    aFrame.pts = 0
+    aFrame.rate = 48000
 
     #Init frame
     video_first_pts = None
@@ -136,13 +176,13 @@ def player_worker_decode(loop, container, streams, cameraplayer, quit_event, thr
             if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
                 time.sleep(0.01)
                 continue
-            if isinstance(exc, StopIteration) and loop_playback:
+            if isinstance(exc, StopIteration):
                 container.seek(0)
                 continue
             if cameraplayer.audioFrameBuffer:
-                cameraplayer.audioFrameBuffer = None
+                cameraplayer.audioFrameBuffer = aFrame
             if cameraplayer.videoFrameBuffer:
-                cameraplayer.videoFrameBuffer = None
+                cameraplayer.videoFrameBuffer = vFrame
             break
         
         # read up to 1 second ahead
@@ -150,19 +190,37 @@ def player_worker_decode(loop, container, streams, cameraplayer, quit_event, thr
             elapsed_time = time.time() - start_time
             if frame_time and frame_time > elapsed_time + 1:
                 time.sleep(0.1)
-                
+                                
         # Handeling an audio frame
         if isinstance(frame, AudioFrame):
             # print("1: " + str(frame))
             for frame in audio_resampler.resample(frame):
                 # fix timestamps
                 frame.pts = audio_samples
+                frame.time_base = audio_time_base
                 audio_samples += frame.samples
 
                 frame_time = frame.time
                 # Put into buffer
                 # print("Write to buffer: " + str(frame))
-                cameraplayer.audioFrameBuffer = frame
+                
+                # Figure out place in buffer and put
+                if (cameraplayer.audioFrameBufferIndex > (len(cameraplayer.audioFrameBuffer) - 1)):
+                    # If trying to write above buffer, eol!
+                    # print("EOL")
+                    cameraplayer.audioFrameBufferIndex = 0
+                    cameraplayer.audioFrameBufferEOL = True
+                    cameraplayer.audioFrameBuffer[cameraplayer.audioFrameBufferIndex] = frame
+                elif (cameraplayer.audioFrameBufferIndex == 2):
+                    # After 5 frames remove EOL
+                    cameraplayer.audioFrameBuffer[cameraplayer.audioFrameBufferIndex] = frame
+                    cameraplayer.audioFrameBufferEOL = False
+                    cameraplayer.audioFrameBufferIndex += 1
+                else:
+                    # If no special condition
+                    cameraplayer.audioFrameBuffer[cameraplayer.audioFrameBufferIndex] = frame
+                    cameraplayer.audioFrameBufferIndex += 1
+                    
         elif isinstance(frame, VideoFrame):
             if frame.pts is None:  # pragma: no cover
                 logger.warning(
@@ -174,8 +232,10 @@ def player_worker_decode(loop, container, streams, cameraplayer, quit_event, thr
             if video_first_pts is None:
                 video_first_pts = frame.pts
             frame.pts -= video_first_pts
-
             frame_time = frame.time
+            # Reformat frame to wanted width and height if above it
+            if (frame.width > newWidth) or (frame.height > newHeight):
+                frame = frame.reformat(width=newWidth, height=newHeight)
             # Put into buffer
             cameraplayer.videoFrameBuffer = frame
             

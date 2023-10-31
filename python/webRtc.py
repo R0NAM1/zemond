@@ -1,7 +1,7 @@
 import asyncio, ast, json, time, cryptocode, av, uuid, cv2, numpy, threading, os
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCDataChannel, RTCRtpCodecParameters
 from aiortc.mediastreams import VideoFrame
-from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaBlackhole, MediaStreamTrack
+from aiortc.contrib.media import MediaPlayer, MediaBlackhole, MediaStreamTrack
 from aiortc.rtcrtpsender import RTCRtpSender
 from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, userUUIDAssociations
 from ptzHandler import updatePTZReadOut, sendAuthenticatedPTZContMov
@@ -244,7 +244,7 @@ async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray):
     for i, cam in enumerate(formatCamArray):
 
         cameraPlayer = requestCameraPlayer(dockerIpArray[i])
-        camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, 'video', thisUUID)
+        camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, thisUUID)
                 
         if (camVideoTrack):
             webRtcPeer.addTransceiver(camVideoTrack, direction='sendonly')
