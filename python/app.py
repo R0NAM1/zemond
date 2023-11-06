@@ -162,11 +162,29 @@ def dashboard():
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.dashboard", commit_id=commit_id, release_id=release_id)
 
-@app.route('/monitors/')
+@app.route('/monitors/', methods=['GET', 'POST'])
 @login_required
 def monitors():
     session.pop('_flashes', None)
+    # For XBX, camarray is just cameras, slideshow is either a camera, or monitor. For map, is just list of cameras
+    
     if (auditUser(current_user.username, "permissionRoot.monitors")):
+        if request.method == 'POST':
+        # Only post we should be getting is request to delete monitor
+        
+            if 'deleteMonitor' in str(request.data.decode()):
+                monToDelete = (str(request.data.decode()).split(':'))[1]
+                
+                # Try to run DB delete query, if it fails continue
+                try:
+                    myCursor.execute("DELETE FROM configuredMonitors where monitorName='{0}'".format(monToDelete))
+                    myDatabase.commit()
+                    
+                    # Respond TRUE to reload monitor page
+                    return make_response('TRUE', 200)
+                except:
+                    pass
+        
         # Two tabs, added monitors, add monitor, left would show all configured monitors in the db, while right would show templates
         # cameras and maps would be plugged into.
         
@@ -177,12 +195,17 @@ def monitors():
         # 'Templates' are just editors. Click on add new and brings up the specific new editor.
         
         # Grab Monitor lists, types.
-        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors;")
-        monList = myCursor.fetchall()
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitortemplate = 'xbx' ORDER BY monitorName ASC;")
+        gridMon = myCursor.fetchall()
         
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitortemplate = 'slideshow' ORDER BY monitorName ASC;")
+        slideMon = myCursor.fetchall()
+        
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitortemplate = 'map' ORDER BY monitorName ASC;")
+        mapMon = myCursor.fetchall()
         # print(monList)
         
-        return render_template('monitors.html', monList=monList, commit_id=commit_id, release_id=release_id)
+        return render_template('monitors.html', gridMon=gridMon, slideMon=slideMon, mapMon=mapMon, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
@@ -195,34 +218,94 @@ def view_monitor(monitor):
         # Check type of monitor, serve specific JS file for different type
         # xbxview.js, fnafmode.js
         monitorjsfile = "non"
-        # print(monList)
+        # Set default delta incase of errors
+        delta = 5
         
+        # Get monitor name and template, verifies it exists.
         myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitorName='{0}';".format(monitor))
-        monList = myCursor.fetchall()
+        monList = myCursor.fetchall()[0]
         
-        monList = monList[0]
-                
+        # Use logic for Grid                
         if monList[1] == "xbx":
+            # If loading just a grid montitor, get it's dbinfo and then the array of camreas to stream
+            # Load XBXVIEW js file
             monitorjsfile = "xbxview"
+            # Info about single monitor
+            myCursor.execute("Select lengthbywidthnum, timeinfo from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+            dbinfo = myCursor.fetchone()
+            # All cameras to display
+            myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+            # Set final CAMARRAY
+            camarray = str(myCursor.fetchone())
+            
+        # Use logic for slideshow
+        elif monList[1] == "slideshow":
+            # Need to load camarray, and then all XBX info!
+            monitorjsfile = "slideshowview"
+            # Init empty objects
+            dbinfo = []
+            camArrayTemp = []
+            # Get array of cams
+            myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+            # Process array for HTTP sending
+            array = (str(myCursor.fetchone()[0]))
+            array = array.replace("'", '"')
+            # Set final CAMARRAY
+            camarray = json.loads(array)
+            
+            # Loop through each camarray item and clean up
+            for key, value in camarray.items():
+                # VALUE is type:name     
+                for key, no in value.items():
+                    # no is just {}, empty, ignore.
+                    # KEY is type:name, determine type, 
+                    key = key.split(':')
+                    
+                    # If CAM, just add dockerIp,
+                    # IF MON, get all docker ips and add to dbinfo
+                    
+                    if (key[0] == 'cam'):
+                        # This is a single camera and just the name
+                        dbinfo.append('single')
+                        camArrayTemp.append(key[1])
+                    elif (key[0] == 'mon'):
+                        # Get this monitor xbx info
+                        myCursor.execute("Select lengthbywidthnum from configuredMonitors WHERE monitorName = '{0}';".format(key[1]))
+                        thisMonInfo = str(myCursor.fetchone()[0])
+                        
+                        # Modify thisMonInfo so splits are unique, commas are NOT caught
+                        dbinfo.append(thisMonInfo)
+                        
+                        # Get cameras to add to array from this mon
+                        myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(key[1]))
+                        monCams = myCursor.fetchone()[0]
+                        
+                        for key, value in monCams.items():
+                            # key is number, value is camera name
+                            for key in value.keys():
+                                # Add key (name) to temp array
+                                camArrayTemp.append(key)
+               
+            # End of loops         
+            # Write permenant camarray
+            camarray = camArrayTemp    
+            
+            # Get delta
+            myCursor.execute("Select timeinfo from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+            delta = ((myCursor.fetchone()[0]).split('s'))[0]
+            
         elif monList[1] == "fnaf":
             monitorjsfile = "fnafmode"
-            
-        myCursor.execute("Select lengthbywidthnum, timeinfo from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
-        dbinfo = myCursor.fetchone()
         
-        myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
-        camarray = str(myCursor.fetchone())
         
-        # for monitor in monList:
-        #     print(monitor[1])
         
-        return render_template('view_monitor.html', camarray=camarray, dbinfo=dbinfo, monitorjsfile=monitorjsfile, monitor=monitor, commit_id=commit_id, release_id=release_id)
+        return render_template('view_monitor.html', camarray=camarray, dbinfo=dbinfo, delta=delta, monitorjsfile=monitorjsfile, monitor=monitor, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
 
     
-    
+# Grid editor
 @app.route('/monitors/xbxedit/<monitor>', methods=['GET', 'POST'])
 @login_required
 def xbxedit(monitor):
@@ -310,6 +393,88 @@ def xbxedit(monitor):
         return render_template('xbxarray_edit.html', localcameras=localcameras, loadedMonInfo=loadedMonInfo, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors.xbxedit", commit_id=commit_id, release_id=release_id)
+
+# Slideshow editor
+@app.route('/monitors/slideshowedit/<monitor>', methods=['GET', 'POST'])
+@login_required
+def slideshowedit(monitor):
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.monitors.slideshowedit")):
+        
+        if request.method == 'POST':
+            splitData = request.data.decode().split("|")
+            timeinfo = splitData[0]
+            disarray = splitData[1]
+            disarray = disarray.split(",")
+            # Create jsoncamarray for storage in db
+            jsondisarray = {}
+            
+            for i, dis in enumerate(disarray):
+                jsondisarray[str(i + 1)] = {dis: {}}
+                
+            jsondisarray = json.dumps(jsondisarray)
+    
+            # Have processed data, now check if monitor entry exists, if not create new entry, if so modify entry.
+    
+            myCursor.execute("Select monitorName from configuredMonitors;")
+            allMon = myCursor.fetchall()
+            
+            for mon in allMon:
+                mon = str(mon)
+                mon = mon[2:]
+                mon = mon[:-3]
+                
+                if monitor == mon:
+                    # Does exist! Modify DB entry
+                    myCursor.execute("UPDATE configuredMonitors SET timeinfo = %s, camarray = %s WHERE monitorName = %s;", (timeinfo, (jsondisarray,), monitor))
+                    myDatabase.commit()
+                    flash('Entry Modified')
+                    return make_response(str("MODIFIED"), 200)
+            
+            # If the monitor exists then the above for loop will finish and return
+            # If not, the below will run and return
+            
+            myCursor.execute("INSERT INTO configuredMonitors (timeinfo, camarray, monitorName, monitortemplate) VALUES (%s, %s, %s, %s);", (timeinfo, (jsondisarray,), monitor, "slideshow"))
+            myDatabase.commit()
+            flash('Entry Created')
+            return make_response(str("CREATED"), 200)
+    
+        # GET REQUEST
+        
+        loadedMonInfo = "False"
+        
+        # Get all monitors for dropdown
+        myCursor.execute("Select monitorName from configuredMonitors WHERE monitortemplate='xbx' ORDER BY monitorName ASC")
+        xbxmon = myCursor.fetchall()
+        
+        # Get all cameras for dropdown
+        myCursor.execute("Select name from localcameras ORDER BY name ASC")
+        localcameras = myCursor.fetchall()
+        
+        # First, check if monitor exists, if not send false in loadedMonInfo, else send array.
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors;")
+        allMon = myCursor.fetchall()
+        
+        # Check if exist, if so set loadedMonInfo to data                        
+        for mon in allMon:
+            monitorName = str(mon[0])
+            template = str(mon[1])
+            
+            if monitorName == monitor:
+                # Same name exists
+                # Make sure template is correct,
+                if template == 'slideshow':
+                    # Is exist!
+                    # Load monitor info into var
+                    myCursor.execute("Select timeinfo, camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitorName))
+                    loadedMonInfo = myCursor.fetchall()
+                    loadedMonInfo = str(loadedMonInfo).replace("', ", "'| ")
+        
+        
+        return render_template('slideshow_edit.html', localcameras=localcameras, xbxmon=xbxmon, loadedMonInfo=loadedMonInfo, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.monitors.slideshowedit", commit_id=commit_id, release_id=release_id)
+
 
 
 @app.route('/search/')
@@ -975,12 +1140,36 @@ def offer_monitor(monitor):
     formatCamArray = []
     
     # Get the assigned camarray from the monitor.
-    myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
-    camarray = myCursor.fetchone()[0]
+    myCursor.execute("Select camarray, monitortemplate from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+    data = myCursor.fetchone()
+    camarray = data[0]
+    monType = data[1]
     
     # Convert camarray json to camarray array for easy processing.
     for key, value in camarray.items():
         formatCamArray.append(list(value.keys())[0])
+        
+    # Now that we have the formatted array, determine the template
+
+    finalFormatArray = []
+
+    # Need to modify our formatCamArray so instead of monitor names, we exand it to all the camera names in the monitor
+    if (monType == 'slideshow'):
+        for entry in formatCamArray:
+            entry = entry.split(':')
+            if entry[0] == 'cam':
+                finalFormatArray.append(entry[1])
+            elif entry[0] == 'mon':
+                # Get all camera entries for monitor and write those to finalFormatArray
+                myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(entry[1]))
+                monCams = myCursor.fetchone()[0]
+                
+                for key, value in monCams.items():
+                    for key in value.keys():
+                        # Have camera name, add to finalFormatArray
+                        finalFormatArray.append(key)
+        formatCamArray = finalFormatArray    
+    
 
     # Format cam array for SQL statement
     camnames = ', '.join(f"'{cam}'" for cam in formatCamArray)
@@ -995,7 +1184,7 @@ def offer_monitor(monitor):
     ORDER BY n.ord;""")
     # assign ip array from response
     dockerIpArray = [row[0] for row in myCursor.fetchall()]
-        
+                
     # Create a new event loop for this session. Allows for us to continue code, but also get a response from the client sdp
     rtcloop = asyncio.new_event_loop()
         
@@ -1115,8 +1304,8 @@ def updateSnapshots():
 
             snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
             onlineCameraCache = tmpCameraCache;
-            print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
-            print("Is sigint? " + str(sigint))
+            # print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
+            # print("Is sigint? " + str(sigint))
             time.sleep(8) # Time to wait between gathering snapshots
         else:
             break;

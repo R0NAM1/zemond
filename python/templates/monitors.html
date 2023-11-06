@@ -13,28 +13,92 @@
 
     </div>
 
-    <div class="tab-content" id='existTabContent'>
-        
-        <div id ="monitors">
-            <table>
-                {% for mon in monList %}
-                <tr>
-                    <td><a href="/monitors/view/{{ mon[0] }}">{{ mon[0] }} ({{ mon[1] }})</a></td>
-                    <td><a href="/monitors/xbxedit/{{ mon[0] }}">Edit</a></td>
-                </tr>
-                {% endfor %}
-            </table>
+    <div id="absoluteDelConfirm">
+        <div id="delContent">
+            <h4>Are you sure you want to delete this monitor?</h4>
+            <div id="abconfirm" onclick="confirmDeleteForQueue()">
+                <h5>Yes</h5>
+            </div>
+            <div id="abdeny" onclick="document.getElementById('absoluteDelConfirm').style.display = 'none';">
+                <h5>No</h5>
+            </div>
         </div>
     </div>
 
+    <div class="tab-content" id='existTabContent'>
+        
+        <div id ="monitorgroups">
+
+            <div id='xbxmondropdown' onclick="xbxmondropdown()">
+                <h4>Grid Monitors ></h4>
+            </div>
+            
+            <div id='xbxmondropdowncontent'>
+                <table>
+                    {% for mon in gridMon %}
+                    <tr>
+                        <td><a href="/monitors/view/{{ mon[0] }}">{{ mon[0] }}</a></td>
+                        <td><a href="/monitors/xbxedit/{{ mon[0] }}">Edit</a></td>
+                        <td><h5 style="cursor:pointer" onclick="runDel('{{ mon[0] }}')">Del</h5></td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id='slideshowdropdown' onclick="slideshowdropdown()">
+                <h4>Slideshow Monitors ></h4>
+            </div>
+            
+            <div id='slideshowdropdowncontent'>
+                <table>
+                    {% for mon in slideMon %}
+                    <tr>
+                        <td><a href="/monitors/view/{{ mon[0] }}">{{ mon[0] }}</a></td>
+                        <td><a href="/monitors/slideshowedit/{{ mon[0] }}">Edit</a></td>
+                        <td><h5 style="cursor:pointer" onclick="runDel('{{ mon[0] }}')">Del</h5></td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+
+            <div id='mapmondropdown' onclick="mapmondropdown()">
+                <h4>Map Monitors ></h4>
+            </div>
+            
+            <div id='mapmondropdowncontent'>
+                <table>
+                    {% for mon in mapMon %}
+                    <tr>
+                        <td><a href="/monitors/view/{{ mon[0] }}">{{ mon[0] }}</a></td>
+                        <td><a href="/monitors/xbxedit/{{ mon[0] }}">Edit</a></td>
+                        <td><h5 style="cursor:pointer" onclick="runDel('{{ mon[0] }}')">Del</h5></td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+
+        </div>
+    </div>
+    
+    
+
     <div class="tab-content" id='newTabContent'>
         <input type="button" value="Add from X By X Template" onclick="xbxedit(monNewName.value)"></input>
+        <input type="button" value="Add from Slideshow Template" onclick="slideshowedit(monNewName.value)"></input>
         <input type="button" value="Add from Map Template" onclick=""></input>
         <form>
             <input id="monNewName" type="text" placeholder="New Monitor Name" name="username" value="">
         </form>
     </div>
 <script>
+
+    function runDel(monToDel) {
+        deleteMonitor(monToDel)
+    }
+
+
     window.onload = openTab('existTabContent');
 </script>
 {% endblock %}

@@ -8,7 +8,6 @@ from threading import Thread, Event
 cameraPlayerDictionary = {}
 
 # Set AV logging, useful for if a stream is erroring for some reason, usually redundant
-# av.logging.set_level(av.logging.PANIC)
 
 class VideoCameraPlayerTrack(MediaStreamTrack):
     # This track is made in webRtc.py and accepts the CameraPlayer object to read buffer from
@@ -61,7 +60,8 @@ class AudioCameraPlayerTrack(MediaStreamTrack):
                       
 # Modified Media Player
 class CameraPlayer():
-    def __init__(self, dockerIp, decode=True, newWidth=(1920), newHeight=(1080)):
+    def __init__(self, dockerIp, decode=True, newWidth=(1280), newHeight=(720)):
+        av.logging.set_level(av.logging.PANIC)
         self.__container = av.open(file="rtsp://" + dockerIp + ":8554/cam1", mode="r", options={'hwaccel': 'auto'}) # Open Cam Stream
         self.__thread: Optional[threading.Thread] = None # Thread to get frames
         self.__thread_quit: Optional[threading.Event] = None # Thread end event

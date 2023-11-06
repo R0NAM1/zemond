@@ -2,11 +2,10 @@
 
 {% block content %}
     <h1>{% block title %}  {% endblock %}</h1>
+    <link rel="stylesheet" href="{{url_for('static', filename='css/cameralist.css')}}">
     <p>Your Cameras:</p>
-    <table border="1px solid black;"
-        border-collapse"collapse;"
-        margin-left="auto;"
-        margin-right="auto;">
+    <div id="tablebong">
+    <table border="1px solid black;" id="camtable">
         <tr>
             <th>Snapshot</th>
             <th>Camera Name</th>
@@ -25,5 +24,5 @@
         </tr>
         {% endfor %}
     </table>
-    
+    </div>
 {% endblock %}

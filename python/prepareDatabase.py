@@ -85,7 +85,7 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS auditLog (
 
 cursor.execute("""CREATE TABLE IF NOT EXISTS configuredMonitors (
    camArray JSONB,
-   timeInfo varchar(50) DEFAULT '0s',
+   timeInfo varchar(50) DEFAULT '5s',
    monitorName varchar(50),
    monitorTemplate varchar (500),
    attMap varchar(50),

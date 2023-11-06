@@ -7,7 +7,8 @@ permissionTreeObject = {
         
         "monitors": {
             "view": {},
-            "xbxedit": {}
+            "xbxedit": {},
+            "slideshowedit": {}
             },
         
         "camera_list": {
