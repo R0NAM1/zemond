@@ -1,0 +1,13 @@
+#camtable {
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    max-width: 100%;
+}
+
+#tablebong {
+    display: block;
+    left: calc(70vw - 50%);
+    position: relative;
+    margin-right: auto;
+}

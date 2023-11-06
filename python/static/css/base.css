@@ -14,3 +14,44 @@
 .username {
   color: whitesmoke
 }
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #343a40;
+  color: white;
+  padding: 20px;
+  margin: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+}
+
+.navbar a {
+  color: white;
+  text-decoration: none;
+  margin-right: 15px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.navbar img {
+  width: 60px;
+  margin-right: 10px;
+}
+
+.username {
+  font-size: 18px;
+}
+
+#logo {
+  width: 100px;
+}
+
+#main-content {
+  padding-top: 100px;
+  padding-bottom: 5%;
+}
