@@ -91,6 +91,11 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS configuredMonitors (
    attMap varchar(50),
    lengthbywidthnum varchar(3)
    );""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS mapData (
+   mapName varchar(50),
+   image VARCHAR
+   );""")
 # Commit Changes To Database
 myDatabase.commit()
 

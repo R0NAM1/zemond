@@ -10,6 +10,7 @@
 
         <div class="tab" id="existTab" onclick="openTab('existTabContent')">Current Monitors</div>
         <div class="tab" id="newTab" onclick="openTab('newTabContent')">Add Monitor</div>
+        <div class="tab" id="mapTab" onclick="openTab('mapTabContent')">Maps</div>
 
     </div>
 
@@ -81,8 +82,6 @@
 
         </div>
     </div>
-    
-    
 
     <div class="tab-content" id='newTabContent'>
         <input type="button" value="Add from X By X Template" onclick="xbxedit(monNewName.value)"></input>
@@ -92,13 +91,54 @@
             <input id="monNewName" type="text" placeholder="New Monitor Name" name="username" value="">
         </form>
     </div>
-<script>
 
+
+
+    <div class="tab-content" id='mapTabContent'>
+        <input type="button" value="Add new map (PNG Only)" onclick="newmap(mapNewName.value)"></input>
+        <div id='mapAppend'>
+            <form>
+                <input id="mapNewName" type="text" placeholder="New Map Name" name="username" value="">
+            </form>
+        </div>
+        <h4>----------------------------</h4>
+        <h4>List of current maps</h4>
+        
+        <table>
+        {% for map in mapList %}
+        <tr>
+            
+            <td>
+                <img src="data:image/png;charset=utf-8;base64, {{ map[1] }}" width="125"/>
+            </td>
+            <td>
+                <h5>{{ map[0] }}</h5>
+            </td>
+            <td>
+                <input type="button" value="Upload New" onclick="uploadNew('{{ map[0] }}')"></input>
+            </td>
+            <td>
+                <input type="button" value="Delete" onclick="deleteMap('{{ map[0] }}')"></input>
+            </td>
+                
+        
+        </tr>
+        {% endfor %}
+        </table>
+
+    </div>
+
+
+
+<script>
     function runDel(monToDel) {
         deleteMonitor(monToDel)
     }
 
+    var mapList = '{{ mapList }}';
+    window.mapList = mapList;
 
     window.onload = openTab('existTabContent');
 </script>
+
 {% endblock %}

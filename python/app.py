@@ -1,5 +1,5 @@
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, signal, dockerComposer # Have to import for just firstRun because of global weirdness
-import tracemalloc
+import tracemalloc, logging
 from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response
 from flask_sock import Sock
 from flask_login import LoginManager, UserMixin, login_user, current_user
@@ -57,7 +57,7 @@ class User(UserMixin):
 global snapshotCache, userUUIDAssociations, sigint;
 
 
-release_id = 'Alpha 0.5.0'
+release_id = 'Alpha 0.6.0'
 
 commit_id = ''
 
@@ -76,6 +76,11 @@ def sigint_handler(signum ,frame):
         time.sleep(1) # Wait one seconds for code to stop executing...
         iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
         del userUUIDAssociations[uuid]
+    
+    # Cancel All Tasks
+    tasks = asyncio.all_tasks()
+    for task in tasks:
+        task.cancel()
     
     sys.exit(0)
 
@@ -171,7 +176,7 @@ def monitors():
     if (auditUser(current_user.username, "permissionRoot.monitors")):
         if request.method == 'POST':
         # Only post we should be getting is request to delete monitor
-        
+            # Want to delete monitor
             if 'deleteMonitor' in str(request.data.decode()):
                 monToDelete = (str(request.data.decode()).split(':'))[1]
                 
@@ -184,6 +189,58 @@ def monitors():
                     return make_response('TRUE', 200)
                 except:
                     pass
+            # Want to upload new map
+            elif 'uploadMap' in str(request.data.decode()):
+                # Upload data to db, then send TRUE
+                # Split data
+                splitData = (str(request.data.decode())).split(':')
+                # 0 is command, 1 is new name, 2 is image data
+                newName = splitData[1]
+                image = splitData[2].replace('image/png;base64,', '')
+                
+                try:
+                    myCursor.execute("INSERT INTO mapData (mapName, image) VALUES (%s, %s);", (newName, image))
+                    myDatabase.commit()
+                    return make_response('TRUE', 200)
+                except Exception as e:
+                    print("Exception, " + str(e))
+                    return make_response('FALSE', 200)
+                    pass
+            # Update existing map
+            elif 'updateMap' in str(request.data.decode()):
+                # Upload data to db, then send TRUE
+                # Split data
+                splitData = (str(request.data.decode())).split(':')
+                # 0 is command, 1 is new name, 2 is image data
+                newName = splitData[1]
+                image = splitData[2].replace('image/png;base64,', '')
+                
+                try:
+                    myCursor.execute("UPDATE mapData SET image = %s WHERE mapName = %s;", (image, newName));
+                    myDatabase.commit()
+                    return make_response('TRUE', 200)
+                except Exception as e:
+                    print("Exception, " + str(e))
+                    return make_response('FALSE', 200)
+                    pass  
+            # Delete a map
+            elif 'deleteMap' in str(request.data.decode()):
+                # Split data
+                splitData = (str(request.data.decode())).split(':')
+                # 0 is command, 1 is new name, 2 is image data
+                mapName = splitData[1]
+                
+                try:
+                    # Try to delete
+                    myCursor.execute("DELETE FROM mapData where mapName='{0}'".format(mapName))
+                    myDatabase.commit()
+                    return make_response('TRUE', 200)
+                except Exception as e:
+                    print("Exception, " + str(e))
+                    return make_response('FALSE', 200)
+                    pass
+            # END POST
+        # GET REQUEST
         
         # Two tabs, added monitors, add monitor, left would show all configured monitors in the db, while right would show templates
         # cameras and maps would be plugged into.
@@ -203,9 +260,12 @@ def monitors():
         
         myCursor.execute("Select monitorName, monitortemplate from configuredMonitors WHERE monitortemplate = 'map' ORDER BY monitorName ASC;")
         mapMon = myCursor.fetchall()
-        # print(monList)
         
-        return render_template('monitors.html', gridMon=gridMon, slideMon=slideMon, mapMon=mapMon, commit_id=commit_id, release_id=release_id)
+        # Grab maps
+        myCursor.execute("Select mapname, image from mapData ORDER BY mapname ASC;")
+        mapList = myCursor.fetchall()
+        
+        return render_template('monitors.html', gridMon=gridMon, slideMon=slideMon, mapMon=mapMon, mapList=mapList, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
 # Will Allow FNAF Mode, single monitor mode, multi-monitor mode, premade views, true power!
@@ -1323,6 +1383,9 @@ if __name__ == '__main__':
     # tracemalloc.start()
     
     os.environ['PYAV_LOGGING'] = 'off'
+    
+    logger = logging.getLogger('asyncio')
+    logger.setLevel(logging.ERROR)
     
     setCommitID()
     
