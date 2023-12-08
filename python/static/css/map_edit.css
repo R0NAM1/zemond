@@ -1,0 +1,10 @@
+#mapFlex {
+    position: relative;
+}
+
+#mapEditDiv {
+    position: fixed;
+    left: 50vw;
+    top: 35vh;
+    border: 1px solid black;
+}

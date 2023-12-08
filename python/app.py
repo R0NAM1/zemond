@@ -57,7 +57,7 @@ class User(UserMixin):
 global snapshotCache, userUUIDAssociations, sigint;
 
 
-release_id = 'Alpha 0.6.0'
+release_id = 'Alpha 0.8.0'
 
 commit_id = ''
 
@@ -535,6 +535,107 @@ def slideshowedit(monitor):
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors.slideshowedit", commit_id=commit_id, release_id=release_id)
 
+# Map monitor editor
+@app.route('/monitors/mapmonedit/<monitor>', methods=['GET', 'POST'])
+@login_required
+def mapmonedit(monitor):
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.monitors.mapmonedit")):
+        
+        if request.method == 'POST':
+            # Decode data
+            mapCameraData = request.data.decode()
+            mapCameraData = json.loads(mapCameraData)
+            # Formalize data
+            mapCameraData = json.dumps(mapCameraData)
+            
+            
+            #mapCameraData is an array, should treat as such
+            
+            # Expected data format type
+            # [["Floor1","Game Room",["Game Room",12.790697674418606,13.26530612244898],["Idol",12.956810631229235,78.31632653061224]],
+            # ["Floor2","Test",["Idol",20.09966777408638,37.56177924217463],["Game Room",73.9202657807309,25.04118616144975]]]
+            # Have processed data, now check if monitor entry exists, if not create new entry, if so modify entry.
+    
+            myCursor.execute("Select monitorName from configuredMonitors;")
+            allMon = myCursor.fetchall()
+            
+            for mon in allMon:
+                mon = str(mon)
+                mon = mon[2:]
+                mon = mon[:-3]
+                
+                if monitor == mon:
+                    # Does exist! Modify DB entry
+                    myCursor.execute("UPDATE configuredMonitors SET camarray = %s WHERE monitorName = %s;", ((mapCameraData,), monitor))
+                    myDatabase.commit()
+                    flash('Entry Modified')
+                    return make_response(str("MODIFIED"), 200)
+            
+            # If the monitor exists then the above for loop will finish and return
+            # If not, the below will run and return
+            
+            myCursor.execute("INSERT INTO configuredMonitors (camarray, monitorName, monitortemplate) VALUES (%s, %s, %s);", ((mapCameraData,), monitor, "map"))
+            myDatabase.commit()
+            flash('Entry Created')
+            return make_response(str("CREATED"), 200)
+            
+        # GET REQUEST
+        
+        loadedMonInfo = "False"
+        
+        # First, check if monitor exists, if not send false in loadedMonInfo, else send array.
+        myCursor.execute("Select monitorName, monitortemplate from configuredMonitors;")
+        allMon = myCursor.fetchall()
+        
+        # Get all cameras for dropdown
+        myCursor.execute("Select name from localcameras ORDER BY name ASC")
+        localcameras = myCursor.fetchall()
+        
+        tmpLocal = []
+        # Process for | split
+        for cam in localcameras:
+            # Clean up
+            tmpLocal.append(cam[0])
+        localcameras = "|".join(tmpLocal)
+             
+        # Fetch map names and map data, indexes corrolate
+        myCursor.execute("Select mapname, image from mapData;")
+        mapData = myCursor.fetchall()
+        
+        mapDataTemp = []
+        
+        for data in mapData:
+            # For every entry in our database, reprocess for easier split later
+            # Abstract to new array, keeps entries divided
+            mapDataTemp.append(str(data))
+            
+        # Temp array constructed, reconstruct with | as entry seperator
+        mapData = "|".join(mapDataTemp)
+            
+        # Check if exist, if so set loadedMonInfo to data                        
+        for mon in allMon:
+            monitorName = str(mon[0])
+            template = str(mon[1])
+            
+            if monitorName == monitor:
+                # Same name exists
+                # Make sure template is correct,
+                if template == 'map':
+                    # Is exist!
+                    # Load monitor info into var
+                    myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitorName))
+                    loadedMonInfo = myCursor.fetchone()[0]
+                                                            
+                    tempArray = []
+                    for data in loadedMonInfo:
+                        tempArray.append(str(data))
+                        
+                    loadedMonInfo = "|".join(tempArray)
+                      
+        return render_template('map_edit.html', loadedMonInfo=loadedMonInfo, localcameras=localcameras, mapData=mapData, commit_id=commit_id, release_id=release_id)
+    else:
+        return render_template('permission_denied.html', permissionString="permissionRoot.monitors.mapmonedit", commit_id=commit_id, release_id=release_id)
 
 
 @app.route('/search/')

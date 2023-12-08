@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{% block title %}  {% endblock %}</h1>
+
+<script src="{{url_for('static', filename='js/map_edit.js')}}"></script>
+<link rel="stylesheet" href="{{url_for('static', filename='css/map_edit.css')}}">
+    
+    <!--This shows a dropdown of all the maps and lets you select one per level, -->
+    
+<div id="mapFlex">
+    <div id="leftColumn">
+    
+    <h4>Create new levels, assign map to it, and create camera buttons.</h4>
+    
+    <table id="floorarray">
+    </table>
+    
+    <h5>---------------------------------</h5>
+    
+    <div id="addNewLevel">
+        <input id="floorName" type="text" placeholder="Floor name or number" value="">
+        <button id="newLevel" type="button" onclick="newFloorLevel()">Add Floor</button>
+    </div>
+
+    <div id="addNewCamera">
+        <button id="newCamera" type="button" onclick="attemptNewCamera()">Add Camera</button>
+    </div>
+    
+    <div id="submitbutton">
+        <button id="submitbuttonelement" type="button" onclick="submitDataToDatabase()">Apply Changes</button>
+    </div>
+
+    <h5>---------------------------------</h5>
+
+    <div>
+        <h4>Associate cameras to buttons.</h4>
+        <table id='cameraButtonAssoc'>
+        </table>
+    </div>
+    
+    </div>
+</div>
+
+<div id="mapEditDiv">
+    <h5>Image Here</h5>
+</div>
+
+
+{% for mesg in get_flashed_messages() %}
+<h1>{{ mesg }}</h1>
+{% endfor %}
+
+<script>
+    var loadedMonInfo = '{{ loadedMonInfo }}';
+    var mapData = '{{ mapData }}';
+    var localcameras = '{{ localcameras }}';
+    let slotList = {};
+    // Grab Camera Names
+
+    // Clean up individual items
+    window.loadedMonInfo = loadedMonInfo;
+    window.localcameras = localcameras;
+    window.onload = loadSettingsFromDB();
+
+</script>
+
+
+
+{% endblock %}
