@@ -354,11 +354,30 @@ def view_monitor(monitor):
             myCursor.execute("Select timeinfo from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
             delta = ((myCursor.fetchone()[0]).split('s'))[0]
             
-        elif monList[1] == "fnaf":
-            monitorjsfile = "fnafmode"
-        
-        
-        
+        elif monList[1] == "map":
+            monitorjsfile = "mapmode"
+            myCursor.execute("Select camarray from configuredMonitors WHERE monitorName = '{0}';".format(monitor))
+            # Set final CAMARRAY
+            tmpArray = []
+            camarray = (myCursor.fetchone()[0])
+
+            for array in camarray:
+                tmpArray.append(str(array))
+                
+            camarray = "|".join(tmpArray)
+
+            # DBINFO is base64 of all maps
+            myCursor.execute("Select mapname, image from mapData;")
+            dbinfo = myCursor.fetchall()
+            
+            tmpArray = []
+            
+            for mapData in dbinfo:
+                tmpArray.append(str(mapData))
+                
+            dbinfo = "|".join(tmpArray)
+            
+            
         return render_template('view_monitor.html', camarray=camarray, dbinfo=dbinfo, delta=delta, monitorjsfile=monitorjsfile, monitor=monitor, commit_id=commit_id, release_id=release_id)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.monitors", commit_id=commit_id, release_id=release_id)
@@ -1307,8 +1326,11 @@ def offer_monitor(monitor):
     monType = data[1]
     
     # Convert camarray json to camarray array for easy processing.
-    for key, value in camarray.items():
-        formatCamArray.append(list(value.keys())[0])
+    try:
+        for key, value in camarray.items():
+            formatCamArray.append(list(value.keys())[0])
+    except:
+        pass
         
     # Now that we have the formatted array, determine the template
 
@@ -1330,7 +1352,35 @@ def offer_monitor(monitor):
                         # Have camera name, add to finalFormatArray
                         finalFormatArray.append(key)
         formatCamArray = finalFormatArray    
-    
+        
+    elif (monType == 'map'):
+        # Attempt to reconruct client slide camNameArray
+        
+        for floorArray in camarray:
+            trackVar = 0;
+            
+            # Loop over each button array
+            for buttonArray in floorArray:
+                doesExist = False
+                
+                # Not actually a buttonArray unless trackVar is above 1
+                if trackVar > 1:
+                    buttonCameraName = (floorArray[trackVar])[0];
+                    
+                    # Check if buttonCameraName is already in formatCamArray,                     
+                    for camName in formatCamArray:
+                        # If equals, then doesExist is true
+                        if camName == buttonCameraName:
+                            doesExist = True
+                    
+                    
+                    # Check has been processed, if not doesExist then add to array
+                    
+                    if doesExist == False:
+                        formatCamArray.append(buttonCameraName)
+                    
+                # floorArray Tracker
+                trackVar = trackVar + 1;
 
     # Format cam array for SQL statement
     camnames = ', '.join(f"'{cam}'" for cam in formatCamArray)
@@ -1345,9 +1395,14 @@ def offer_monitor(monitor):
     ORDER BY n.ord;""")
     # assign ip array from response
     dockerIpArray = [row[0] for row in myCursor.fetchall()]
-                
+            
     # Create a new event loop for this session. Allows for us to continue code, but also get a response from the client sdp
     rtcloop = asyncio.new_event_loop()
+        
+    # An SSRC is a 'Synchronization Source' for WebRTC Transceivers to properly route RTP streams, ONLY UNIQUE IDENTIFIER FOR ASSOCIATING STREAMS
+    # SSRC Associate variable so we can assign unique video stream to ssrc (random32 integer)
+    # Associated via index, so formatCamAray[3] would be equal to ssrcAssoc[3]
+    ssrcAssoc = []
         
     # # # Now create a timer that is reset by Ping-Pong.
     # Add generated info to userUUIDAssociation
@@ -1355,9 +1410,11 @@ def offer_monitor(monitor):
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, monitor]
 
     # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
-    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray))
+    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray, ssrcAssoc))
     
-    
+    # Need to combine return SDP and ssrcAssoc into one piece of returnable data for monitor to use (Done already in monWebRtcStart)
+    # I question everyday why WebRTC is the way it is, no wonder the existing tutorials are so lacking and soulless
+        
     # # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # # Another thread so we don't block the code.
     webRTCThread = Thread(target=rtcloop.run_forever)

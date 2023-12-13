@@ -226,7 +226,7 @@ async def singleWebRtcStart(thisUUID, dockerIP, cameraName, request):
     return final
 
 ## MONITOR
-async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray):
+async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray, ssrcAssoc):
     # Access to uuidAssociations
     global userUUIDAssociations
     # Set SDP paramaters from client offer.
@@ -239,16 +239,19 @@ async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray):
     webRtcPeer = RTCPeerConnection(configuration=RTCConfiguration(
     iceServers=[RTCIceServer(
         urls=[stunServer])]))
-                
+                                
     # Loop and add player tracks to webRtc.
     for i, cam in enumerate(formatCamArray):
-
+        
+        # print("Adding cameraPlayer: " + dockerIpArray[i])
+        
         cameraPlayer = requestCameraPlayer(dockerIpArray[i])
         camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, thisUUID)
-                
-        if (camVideoTrack):
-            webRtcPeer.addTransceiver(camVideoTrack, direction='sendonly')
         
+        if (camVideoTrack):
+            transceiver = webRtcPeer.addTransceiver(camVideoTrack, direction='sendonly')
+            ssrcAssoc.append(str(transceiver.sender._ssrc))
+                    
     # When datachannel opened, make event handler for getting a message
     @webRtcPeer.on("datachannel")
     def on_datachannel(channel):
@@ -279,7 +282,7 @@ async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray):
     
     # Format final response for client
     final = ("{0}").format(json.dumps(
-            {"sdp": (webRtcPeer.localDescription.sdp), "type": webRtcPeer.localDescription.type}
+            {"sdp": (webRtcPeer.localDescription.sdp), "type": webRtcPeer.localDescription.type, "ssrcAssoc": ssrcAssoc}, 
         ))
     
     # Return response
