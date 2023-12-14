@@ -1,27 +1,45 @@
 <!DOCTYPE html>
 <html>
+
   <head>
     <title>Zemond Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="static/bootstrap.min.css" rel="stylesheet" media="screen">
   </head>
+
   <body>
-    <div class="container">
-      <h1>Please Login To The Zemond Security System</h1>
+
+    <link rel="stylesheet" href="{{url_for('static', filename='css/login.css')}}">
+
+    <img id='logoimage' src="{{url_for('static', filename='pictures/logo.png')}}"/>
+
+    <div id="loginstuff">
+
+      <h1 id="zemondlogintext" >Zemond Login</h1>
+
       <br>
+
       <form action="" method="post">
-        <input type="text" placeholder="Username" name="username" value="{{
-          request.form.username }}">
-         <input type="password" placeholder="Password" name="password" value="{{
-          request.form.password }}">
+
+        <input type="text" placeholder="Username" name="username" value="{{request.form.username }}">
+
+        <br>
+
+        <input type="password" placeholder="Password" name="password" value="{{request.form.password }}">
+
+        <br>
+
         <input class="btn btn-default" type="submit" value="Login">
+
       </form>
-      {% if error %}
-        <p class="error"><strong>Error:</strong> {{ error }}
-      {% endif %}
-      {% for mesg in get_flashed_messages() %}
-      <h1>{{ mesg }}</h1>
-      {% endfor %}
+
     </div>
+
+    {% if error %}
+    <p class="error"><strong>Error:</strong> {{ error }}
+    {% endif %}
+    {% for mesg in get_flashed_messages() %}
+    <h1>{{ mesg }}</h1>
+    {% endfor %}
+
   </body>
+
 </html>

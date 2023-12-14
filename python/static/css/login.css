@@ -1,0 +1,22 @@
+#logoimage {
+    width: 500px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translate(17vw, 15vh);
+}
+
+#loginstuff {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translate(52vw, 47vh);
+}
+
+body {
+    background: linear-gradient(to bottom, #3c3c3c, #262626);
+}
+
+#zemondlogintext {
+    color: whitesmoke;
+}

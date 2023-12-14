@@ -9,6 +9,7 @@ from io import BytesIO
 from threading import Thread, active_count
 from git import Repo
 from waitress import serve # Production server
+from sqlescapy import sqlescape
 
 # COMMENT TO SEE FFMPEG OUTPUT, OR ADD TRACE
 os.environ['AV_LOG_LEVEL'] = 'quiet'
@@ -117,30 +118,46 @@ def index():
 def login():
     session.pop('_flashes', None)
     error = None
+    # POST REQUEST
     if request.method == 'POST':
+        # Get inputted username and password, sanitize
         inputtedUsername = request.form['username']
-        if (auditUser(inputtedUsername, "permissionRoot.userSettings.accountActive")):
-            # Check if username exists in database
+        inputtedPassword = request.form['password']
+        # Sanitize inputs with psycopg2 Identifier
+        santizedUsername = sqlescape(inputtedUsername)
+        santizedPassword = sqlescape(inputtedPassword)
+        
+        # Check if user actually exists in database
+        if (auditUser(santizedUsername, "permissionRoot.userSettings.accountActive")):
             # DO HERE incase somebody is bruteforcing logins with different names, real or not.
-            if verifyUserPassword(inputtedUsername, request.form['password']):
-                
-                                
-                localUserObject = User(inputtedUsername)
+            if verifyUserPassword(santizedUsername, santizedPassword):
+                # Verified password, permit login (Eventually integrate 2FA with FIDO or U2F)
+                # Set user object for flask to santizedUsername
                 # Register user with flask session by passing in username as string, and it makes it a user object same character set as string
                 # "user" --> user (as instance of User())
+                localUserObject = User(santizedUsername)
+                # Login user to flask with flaskUser object
                 login_user(localUserObject)
-                # Set logged_in to true so can access any page
+                # Set client session cookie logged_in to true so can access any page
                 session['logged_in'] = True
                 session.pop('_flashes', None)
-                print(session)
+                # Debug for finding issues with cookies
+                # print(session)
+                # Log in code should be finished
                 flash('Your logged in!')
+                # Redirect to dashboard when finished
                 return redirect(url_for('dashboard'))
             else:
+                # Could not verify password, give generic message
                 session.pop('_flashes', None)
                 flash('Username or Password is incorrect!')
         else:
+            # If we could not find account, give generic message
             session.pop('_flashes', None)
-            flash('Account Inactive')
+            flash('Username or Password is incorrect!')
+        ## END POST
+
+    # GET REQUEST
     return render_template('login.html', error=error, commit_id=commit_id, release_id=release_id)
 
 @app.route('/logout/')
