@@ -101,16 +101,25 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
             # Append to playlist object
             m3u8Playlist.segments.append(segmentWriting)
             
+            # print("Kill Signal True")
+            
             # Write playlist object to disk
             with open(m3u8AbsolutePath, 'w') as file:
                 file.write(m3u8Playlist.dumps())
             sys.exit()
+               
+        # CURRENT BUG
+        # At seemingly random, frame buffer will not empty and last frame will be written over and over forever? Somehow??
+        # BUG FOUND: When encoder has no frames to give out when encoding None, it gives End Of File exception, solution
+        # is to wrap this in a try statement
                 
         # Try to encode latestFrame and write resulting packets to mp4
         try:
             # Grab latest frame from queue
             latestFrame = rtspFrameQueue.get()
-                        
+            
+            # print("Latest frame: " + str(latestFrame))
+            
             # Depending on frame grabbed, process diffrerently
             # AUDIO
             if isinstance(latestFrame, av.AudioFrame):
@@ -122,6 +131,7 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                 
                 # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstAudioFramePTS)
                 latestFrame.pts -= firstAudioFramePTS
+                # print("New PTS: " + str(latestFrame.pts))
                 
                 # Encode frame to packet for muxxing into container
                 for packet in outputAudio.encode(latestFrame):
@@ -137,18 +147,26 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                 
                 # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstVideoFramePTS)
                 latestFrame.pts -= firstVideoFramePTS
+                # print("New PTS: " + str(latestFrame.pts))
 
                 # Encode frame to packet for muxxing into container
                 for packet in outputVideo.encode(latestFrame):
                     outputContainer.mux(packet)
                     
-            
+            # print("Time elapsed: " + str(time.time() - startTime))
             # Check if secondsToWrite have elapsed since start of write
             if time.time() - startTime >= secondsToWrite:
+                # print("Time above quota")
                 # Close current output container and return True to signal write has finished
                 # Flush remianing packets to container
-                remainPackets = outputVideo.encode(None)
-                outputContainer.mux(remainPackets)
+                # This can fail if remainPackets is None, wrap in try statement so if fails we can close media
+                try:
+                    remainPackets = outputVideo.encode(None)
+                    outputContainer.mux(remainPackets)
+                except Exception as e:
+                    # print("Got exception in emptying encoder: " + str(e))
+                    pass
+                
                 # Close container
                 outputContainer.close()
                 # Return true to break loop and show code completeled normally
@@ -171,7 +189,7 @@ def mainLoopingLogic():
     camera_name_env = initEnvVariable("CAMERA_NAME")
     
     # Get RTSP camera source
-    RTSP_PATHS_CAM1_SOURCE = initEnvVariable("RTSP_PATHS_CAM1_SOURCE")
+    RTSP_PATHS_CAM1_SOURCE = 'rtsp://127.0.0.1:8554/cam1'
 
     # Get retentionInDays
     retentionInDays = int(initEnvVariable("retentionInDays"))
@@ -186,6 +204,7 @@ def mainLoopingLogic():
     # Segment order should be in oldest to newest sequencial order, so it plays properly from m3u8 
     
     # Open RTSP Source and invdividual streams
+    # Implement if we cannot open RTSP path then we retry until we do
     rtspSourceContainer = av.open(RTSP_PATHS_CAM1_SOURCE)
     templateVideo = rtspSourceContainer.streams.video[0]
     templateAudio = rtspSourceContainer.streams.audio[0]
@@ -398,6 +417,10 @@ if __name__ == '__main__':
     # Register unexpected SIGINT handler, so outputContainer closes properly, and other cleanup!
     # MUST do in main thread, as listener thread, so move main logic to seperated threaded function.
     signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGTERM, sigint_handler)
+    
+    # Wait 5 seconds for RTSP server to start in docker container, then continue execution
+    time.sleep(5)
     
     # Start seperate thread that runs main program, can properly handle SIGINT
     mainTask = threading.Thread(target=mainLoopingLogic)
