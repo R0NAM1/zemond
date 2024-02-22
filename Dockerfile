@@ -1,13 +1,11 @@
-FROM alpine:3.16.1
+FROM debian:trixie
 
 MAINTAINER R0NAM1 r0nam1@toasty.cafe
 
-RUN apk update && \
-    apk add supervisor ffmpeg bash coreutils py3-pip libpq-dev gcc python3-dev musl-dev py3-lxml
-
-RUN rm -rf /var/cache/apk/*
-
-RUN pip3 install requests beautifulsoup4 psycopg2 
+RUN apt update && \
+    apt install supervisor tzdata ffmpeg bash coreutils python3 python3-pip libpq-dev gcc python3-dev musl-dev python3-lxml python3-psycopg2 python3-bs4 python3-requests python3-m3u8 python3-av -y
+    
+RUN apt clean
 
 COPY ./supervisord.conf /etc/supervisor/supervisord.conf
 

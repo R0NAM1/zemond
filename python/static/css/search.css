@@ -1,0 +1,172 @@
+.selectCameraItem {
+    color: black;
+}
+
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#videoContainer {
+    position: fixed;
+    top: 120px;
+    bottom: calc(43px + 100px);
+    left: 250px;
+    background-image: linear-gradient(rgb(88, 88, 88), rgb(10, 10, 10));
+    right: 0px;
+    color: whitesmoke;
+
+    display: grid;
+    justify-items: center;
+    align-items: center;
+}
+
+#videoContainer video {
+    border: 5px solid black;
+}
+
+#playPauseButtonContainer {
+    position: fixed;
+    height: 100px;
+    background-color: rgb(102, 102, 102);
+    border-top: 5px solid black;
+    border-bottom: 5px solid black;
+    border-right: 5px solid black;
+    width: 50px;;
+    right: 0px;
+    bottom: 43px;
+}
+
+#playPauseButton {
+    position: absolute;
+    height: 45px;
+    background-color: rgb(80, 80, 80);
+    border-bottom: 5px solid black;
+    width: 50px;
+    top: 0;
+}
+
+#exportButton {
+    position: absolute;
+    height: 50px;
+    background-color: rgb(80, 80, 80);
+    /* border-bottom: 5px solid black; */
+    width: 50px;
+    bottom: 0;
+}
+
+#videoScrubberBox{
+    position: fixed;
+    height: 100px;
+    background-color: rgb(102, 102, 102);
+    border-top: 5px solid black;
+    border-bottom: 5px solid black;
+    border-right: 5px solid black;
+    left: 350px;
+    right: 50px;
+    bottom: 43px;
+}
+
+#cameraListScrub {
+    position: fixed;
+    height: 100px;
+    background-color: rgb(102, 102, 102);
+    border-top: 5px solid black;
+    border-bottom: 5px solid black;
+    border-right: 5px solid black;
+    left: 245px;
+    width: 100px;
+    bottom: 43px;
+}
+
+#videoScrubberTriangle {
+    position: absolute;
+    display: none;
+    width: 0;
+    height: 0;
+    border-left: 26px solid transparent;
+    border-right: 26px solid transparent;
+    border-top: 25px solid black;
+    cursor: pointer;
+}
+
+#videoScrubberHandle {
+    position: absolute;
+    width: 4px;
+    height: 100px;
+    background-color: black;
+    transform: translate(-2px, -2px);
+}
+
+#leftSidePopup {
+    position: fixed;
+    top: 120px;
+    bottom: 43px;
+    left: 0;
+    background-color: lightgray;
+    border: 5px solid black;
+    width: 250px;
+    color: whitesmoke;
+}
+
+label {
+    color: whitesmoke;
+}
+
+#step1selectcameras {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    /* Magic sauce for this scroll space, 100% of the view height offset by 550px, which works for some reason */
+    height: calc(100vh -  550px);
+    top: 0px;
+    width: 100%;
+    bottom: 375px;
+    text-align: center;
+    overflow-y: auto;
+}
+
+#step2selecttime {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    height: 275px;
+    width: 100%;
+    border-top: 5px solid black;
+    bottom: 100px;
+    text-align: center;
+}
+
+#step3submittoserver {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    height: 100px;
+    width: 100%;
+    border-top: 5px solid black;
+    bottom: 35px;
+    text-align: center;
+}
+
+#playbackSpeed {
+    position: absolute;
+    height: 35px;
+    width: 100%;
+    border-top: 5px solid black;
+    background-color: rgb(102, 102, 102);
+    bottom: 0px;
+}
+
+#playbackText {
+    position: absolute;
+    left: 10px;
+    transform: translate(0, -15px);
+}
+
+#playBackSpeedSelect {
+    position: absolute;
+    right: 35px;
+    transform: translate(0, 5px);
+}
+
+#videoTemp {
+    display: none;
+}

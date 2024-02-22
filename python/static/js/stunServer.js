@@ -1,1 +1,1 @@
-export let stunServer = {"urls": "stun:nvr.internal.my.domain"}
+export let stunServer = {"urls": "stun:nvr.internal.toasty.cafe"}

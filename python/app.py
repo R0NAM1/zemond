@@ -1,6 +1,7 @@
 import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, signal, dockerComposer # Have to import for just firstRun because of global weirdness
-import tracemalloc, logging
-from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response
+import tracemalloc, logging, m3u8
+from datetime import datetime
+from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response, jsonify, send_file, Response
 from flask_sock import Sock
 from flask_login import LoginManager, UserMixin, login_user, current_user
 from functools import wraps
@@ -27,14 +28,13 @@ from ptzHandler import readPTZCoords, sendContMovCommand, sendAuthenticatedPTZCo
 from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 from permissionTree import permissionTreeObject
-from webRtc import singleWebRtcStart, monWebRtcStart
+from webRtc import singleWebRtcStart, monWebRtcStart, stunServer
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
 login_manager.init_app(app)
 
 app.secret_key = 'IShouldBeUnique!' # Change this, as it's just good practice, generate some random hash string.
-
 
 # app.config.update(
 #     SESSION_COOKIE_SECURE=True,
@@ -58,7 +58,7 @@ class User(UserMixin):
 global snapshotCache, userUUIDAssociations, sigint;
 
 
-release_id = 'Alpha 0.8.0'
+release_id = 'Alpha 0.9.0'
 
 commit_id = ''
 
@@ -92,6 +92,8 @@ def setCommitID():
     commit_id = commit_id[:10] + "..."
 
 # If not logged_in, make em!
+# If there is no request.url, redirect to dashboard
+# Else, redirect to request.url
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
@@ -99,6 +101,7 @@ def login_required(f):
             return f(*args, **kwargs)
         else:
             flash('You need to login first.')
+            session['wants_url'] = request.url
             return redirect(url_for('login'))
     return wrap
 
@@ -123,7 +126,8 @@ def login():
         # Get inputted username and password, sanitize
         inputtedUsername = request.form['username']
         inputtedPassword = request.form['password']
-        # Sanitize inputs with psycopg2 Identifier
+        
+        # Sanitize inputs with sqlescapy sqlescape object
         santizedUsername = sqlescape(inputtedUsername)
         santizedPassword = sqlescape(inputtedPassword)
         
@@ -145,8 +149,11 @@ def login():
                 # print(session)
                 # Log in code should be finished
                 flash('Your logged in!')
-                # Redirect to dashboard when finished
-                return redirect(url_for('dashboard'))
+                # Redirect to dashboard when finished if requestedUrl is None, else redirect to requestedUrl
+                if session['wants_url'] is None:
+                    return redirect(url_for('dashboard'))
+                else:
+                    return redirect(session['wants_url'])
             else:
                 # Could not verify password, give generic message
                 session.pop('_flashes', None)
@@ -678,14 +685,118 @@ def mapmonedit(monitor):
 @login_required
 def search():
     session.pop('_flashes', None)
-    if (auditUser(current_user.username, "permissionRoot.search")):    
-        return render_template('inProgress.html', commit_id=commit_id, release_id=release_id)
+    if (auditUser(current_user.username, "permissionRoot.search")):
+        # Return search.html with localcameras
+        myCursor.execute("Select name from localcameras ORDER BY name ASC")
+        localcameras = myCursor.fetchall()
+        # Process for client
+        tempArray = []
+        for data in localcameras:
+            tempArray.append(str(data[0]))
+            
+        localcameras = "|".join(tempArray) 
+               
+        return render_template('search.html', commit_id=commit_id, release_id=release_id, localcameras=localcameras)
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.search", commit_id=commit_id, release_id=release_id)
+
 # Will allow looking back at all available footage currently written to disk from the time called, lists date and time footage starts,
 # allow selecting, highlighting, bookmarking, and exporting snapshots and mp4's. Will probably change how footage is wrote from mp4's
 # to .ts livestream chunks and try to embed current system time into it. 
+@app.route('/search/m3u8request', methods=['GET', 'POST'])
+@login_required
+def search_m3u8request():
+    session.pop('_flashes', None)
+    if (auditUser(current_user.username, "permissionRoot.search")):
+    
+        if request.method == 'POST':
+            requestData = json.loads(request.data.decode())
+            camerasToRetrieve = requestData[0]
+            
+            # camerasToRetrieve is array of camera names, return data will be generated m3u8 with | as seperator
+    
+            # First we should parse the two dates into a python object
+            fromDateObject = datetime.strptime(requestData[1], "%Y-%m-%dT%H:%M")
+            toDateObject = datetime.strptime(requestData[2], "%Y-%m-%dT%H:%M")
+            
+            # Array to hold m3u8 strings
+            m3u8StringArray = []
+            
+            # Loop to generate m3u8 data
+            
+            for cameraNameSpace in camerasToRetrieve:
+                # Future Check, does user have access to camera?
+            
+                urlList = []
+                m3u8ObjectTextToSend = m3u8.M3U8()
+                
+                cameraName = cameraNameSpace.replace(" ", "-")
+                # Open m3u8
+                m3u8AbsolutePath = ('/zemond-storage/' + cameraName + '/' + cameraName + '.m3u8')
+                m3u8PlaylistObject = m3u8.load(m3u8AbsolutePath)
 
+                # Loop through each segment, check if is within date range, if so add url to urllist in order
+                for segment in m3u8PlaylistObject.segments:
+                    segmentDate = segment.program_date_time.replace(tzinfo=None)
+                    if fromDateObject <= segmentDate <= toDateObject:
+                        urlList.append(segment.uri)
+                        # How do I get server address? Use stunServer, should always be this zemond box
+                        baseFileName = (os.path.basename(segment.uri))
+                        newUri = '/search/grabVideoFromStorage/' + cameraName + '/' + baseFileName
+                        # Rewrite URI to reflect server and not local directory
+                        segment.uri = newUri
+                        segment.discontinuity = True
+                        m3u8ObjectTextToSend.segments.append(segment)
+                
+                m3u8ObjectTextToSend.target_duration = 11
+                m3u8ObjectTextToSend.media_sequence = 0
+                m3u8ObjectTextToSend.playlist_type = 'VOD'
+                m3u8ObjectTextToSend.version = 3
+                m3u8ObjectTextToSend.is_endlist = True
+                
+                m3u8PlainText = m3u8ObjectTextToSend.dumps()
+                
+                # Add generated m3u8 to m3u8StringArray
+                m3u8StringArray.append(m3u8PlainText)
+                
+            # Loop finished
+            # Generate string response from array with | seperator
+            m3u8ResponseString = "|".join(m3u8StringArray)
+            
+            return Response(m3u8ResponseString)
+    else:
+        return make_response("PERMISSION DENIED", 405)
+    
+# Get motion events for specific cameras, handles one camera at a time
+@app.route('/search/grabMotionEventsBetweenTime', methods=['GET', 'POST'])
+@login_required
+def search_grabMotionEventsBetweenTime():
+    if (auditUser(current_user.username, "permissionRoot.search")):
+        if request.method == 'POST':
+            # requestData 0, 1 is timefrom, timeto
+            # requestData 2 is camera name
+            requestData = json.loads(request.data.decode())
+            camerasToRetrieve = requestData[0]
+        # GET
+    else:
+        return make_response("PERMISSION DENIED", 405)
+    
+@app.route('/search/grabVideoFromStorage/<cameraName>/<videoFileName>', methods=['GET', 'POST'])
+@login_required
+def search_grabVideoFromStorage(cameraName, videoFileName):
+    if (auditUser(current_user.username, "permissionRoot.search")):
+        try:
+            # FUTURE CHECK, does user have access to camera?
+            if '.ts' in videoFileName:
+                fileNameDiskUri = ('/zemond-storage/' + cameraName + '/' + videoFileName)
+                return send_file(fileNameDiskUri, mimetype='video/MP2T', as_attachment=False, conditional=True)
+            else:
+                return make_response("REQUEST NOT FOR TS FILE", 404)
+        except Exception as e:
+            return make_response("404 FILE NOT FOUND", 404)
+    else:
+        return make_response("PERMISSION DENIED", 405)
+    
 @app.route('/cameralist/')
 @login_required
 def cameraList():
@@ -1131,7 +1242,7 @@ def addCamera():
                                     address, params = rtspurl.split("/cam", 1)
                                     rtspCredString = currentiurlString[:7] + currentiusernameString + ":" + cryptocode.decrypt(str(currentipasswordString), passwordRandomKey) + "@" + currentiurlString[7:]
                                 
-                                    addRunningContainer(cameraname, rtspCredString, "268435456", "48")
+                                    addRunningContainer(cameraname, rtspCredString, "1")
                                     return redirect(url_for('dashboard'))
 
         return render_template('add_camera.html', commit_id=commit_id, release_id=release_id)

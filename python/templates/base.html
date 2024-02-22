@@ -4,35 +4,24 @@
     <link rel="stylesheet" href="{{url_for('static', filename='css/base.css')}}">
     <title>Zemond</title>
   </head>
+
   <body>
-
-    
-
     <nav class="navbar">
         <a id="logo" href="{{ url_for('index')}}"><img src="{{url_for('static', filename='pictures/logo.png')}}"/> Zemond</a>
 
+        <a href="/dashboard/"><img src="{{url_for('static', filename='grid-large.png')}}" align="left" />  Dashboard</a>
 
+        <a href="/monitors/"><img src="{{url_for('static', filename='monitor-dashboard.png')}}" align="left" />  Monitors</a>
 
-                <a href="/dashboard/"><img src="{{url_for('static', filename='grid-large.png')}}" align="left" />  Dashboard</a>
+        <a href="/cameralist/"><img src="{{url_for('static', filename='format-list-bulleted.png')}}" align="left" />  Camera List</a>
 
+        <a href="/search/"><img src="{{url_for('static', filename='timeline-clock-outline.png')}}" align="left" />  Search Timeline</a>
 
-                <a href="/monitors/"><img src="{{url_for('static', filename='monitor-dashboard.png')}}" align="left" />  Monitors</a>
-
-                <a href="/cameralist/"><img src="{{url_for('static', filename='format-list-bulleted.png')}}" align="left" />  Camera List</a>
-
-
-
-                <a href="/search/"><img src="{{url_for('static', filename='timeline-clock-outline.png')}}" align="left" />  Search Timeline</a>
-
-
-
-                <a href="/settings/"><img src="{{url_for('static', filename='wrench-cog.png')}}" align="left" />  Settings</a>
-
+        <a href="/settings/"><img src="{{url_for('static', filename='wrench-cog.png')}}" align="left" />  Settings</a>
 
         <div class="username">
-        {{ current_user.username }}
+          {{ current_user.username }}
         </div>
-
     </nav>
 
     <div class="container" id="main-content">
@@ -41,4 +30,6 @@
 
     <div class="bottom-bar">
         <span class="versionids">Zemond Commit Hash: {{ commit_id }} Release: {{ release_id }}</span>
-      </div>
+    </div>
+  </body>
+</html>

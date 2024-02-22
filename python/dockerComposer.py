@@ -11,7 +11,7 @@ firstRunDockerCheck = False;
 
 dockerClient = docker.from_env()
 
-def addRunningContainer(cameraName, rtspCredentialString, clipSize, clipLimit):
+def addRunningContainer(cameraName, rtspCredentialString, retentionInDays):
     cameraNameHash = cameraName.replace(" ", "-")
     print("Adding a docker container for camera {0} if it does not exist.".format(cameraNameHash))
 
@@ -40,16 +40,17 @@ def addRunningContainer(cameraName, rtspCredentialString, clipSize, clipLimit):
 
         # Add Enviroment Variables Here
 
-        enviromentVars = {"TZ": "America/Los_Angles", "RTSP_PATHS_CAM1_SOURCE": rtspCredentialString, "RTSP_PROTOCOLS": "udp",
-        "CLIP_SIZE": clipSize, "CLIP_LIMIT": clipLimit, "CAMERA_NAME": cameraNameHash, "CAMERA_NAME_SPACE": cameraName}
+        enviromentVars = {"RTSP_PATHS_CAM1_SOURCE": rtspCredentialString, "RTSP_PROTOCOLS": "udp",
+        "retentionInDays": retentionInDays, "CAMERA_NAME": cameraNameHash, "CAMERA_NAME_SPACE": cameraName}
 
-        # Add Volumes mounted here, setup for a local cache right now and offload to NAS when complete.
+        # Add Volumes mounted here
+        #TTMP
+        volumeMappings = {"/home/evan/Coding/zemond": {"bind": "/zemond", "mode": "ro"}, 
+        "/zemond-storage": {"bind": "/zemond-storage", "mode": "rw"},
+        "/etc/localtime": {"bind": "/etc/localtime", "mode": "ro"},
+        "/etc/timezone": {"bind": "/etc/timezone", "mode": "ro"}}
 
-        volumeMappings = {"/zemond/": {"bind": "/zemond", "mode": "rw"}, 
-        "/mnt/NAS/Zemond-Storage/": {"bind": "/zemond-storage", "mode": "rw"}, 
-        "/zemond-temp": {"bind": "/zemond-temp", "mode": "rw"}}
-
-        print(dockerClient.containers.run(network="zemond-nat", detach=True, image="zemond/cameramain:v1.0" ,name=cameraNameHash, environment=enviromentVars, volumes=volumeMappings, restart_policy={"Name": "unless-stopped"}))
+        print(dockerClient.containers.run(network="zemond-nat", privileged=True, detach=True, image="zemond/cameramain:v1.0" ,name=cameraNameHash, environment=enviromentVars, volumes=volumeMappings, restart_policy={"Name": "unless-stopped"}))
 
         print([container.name for container in (dockerClient.containers.list())])
 
@@ -163,7 +164,7 @@ def dockerWatcher():
                                 
                                 
                     # Create Container if it does not exist
-                    # addRunningContainer(camera, rtspCredString, "268435456", "48")
+                    addRunningContainer(camera, rtspCredString, "1")
                     
             # For first run, set var to show containers have been checked.
             global firstRunDockerCheck

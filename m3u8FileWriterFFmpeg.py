@@ -5,13 +5,19 @@ import os, sys, m3u8, datetime, av, asyncio, threading, time, queue, fractions, 
 # If calculations are needed for space-storage allocations, found website works well (Use HIGH for each format): 
 # https://www.cctvcalculator.net/en/calculations/storage-needs-calculator/
 #
+# ABOVE NO LONGER EXISTS, even though it was an amazing tool, this one works as well:
+# https://www.westerndigital.com/tools/surveillance-capacity-calculator
+#
 # This file is basically an RTSP to m3u8 file converter, so it can be used outside of Zemond as well with a minor amount of modification!
-global killSignal
+global killSignal, frameQueueEmptyTracker
 
 # Some basic settings below, including what video encoder to use (libx265 by default), and audio encoder.
 directOutputToDockerLog = True # Also just STDOUT and STDERR, basically does script output text?
-audioEncoderToUse = 'mp3'
-videoEncoderToUse = 'libx265' # Valid options: libx265, libx264
+audioEncoderToUse = 'mp3' # Basic audio codec, nothing special
+videoEncoderToUse = 'libx264' # Valid options: libx265, libx264, only use h265 if your browser supports it, Chrome should
+formatContainerToUse = 'mpegts' # Livestreamable chunked format, so the browser can recall footage
+formatContainerExtension = 'ts' # That chuncked format extension
+frameQueueEmptyTracker = 0 # If we don't get a frame X amount of times, kill program
 
 # When a SIGINT is detected, set the global killSignal to true so all functions and loops cease
 def sigint_handler(sig, frame):
@@ -71,15 +77,20 @@ def m3u8FileCheck(camera_name_env, cameraDirectory):
 # Seperate threaded function to write RTSP frames to processing queues
 def writeFramesToQueue(inputContainer, rtspFrameQueue):
     global killSignal
-    # For every incoming frame in rtspContainer
-    for frame in inputContainer.decode():
-        # Originally broke this if killSignal was detected, but broke parent thread when this broke! So just break parent thread and have this one exit naturally 
-        # Write next frame to queue from inputContainer
-        rtspFrameQueue.put(frame)
-        
+    try:        
+        # For every incoming frame in rtspContainer
+        for frame in inputContainer.decode():
+            # Originally broke this if killSignal was detected, but broke parent thread when this broke! So just break parent thread and have this one exit naturally 
+            # Write next frame to queue from inputContainer    
+            rtspFrameQueue.put(frame)
+            
+    except Exception as e:
+        print("Exception in writting to frame queue: " + str(e))
+        pass
+            
 # Main thread function to write next frame in queue to output container
 def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo, outputContainer, videoTimeBase, secondsToWrite, segmentWriting, m3u8Playlist, m3u8AbsolutePath):
-    global killSignal
+    global killSignal, frameQueueEmptyTracker
     # Get start time for writing for secondsToWrite
     startTime = time.time()
     # For proper frame timing, using first frame PTS as reference
@@ -98,10 +109,13 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
             # Close container
             outputContainer.close()
             # Make proper changes to m3u8
+            
+            # Get duration of container just written, set in segment
+            durationEstimate = (time.time() - startTime)
+            segmentWriting.duration = durationEstimate
+            
             # Append to playlist object
             m3u8Playlist.segments.append(segmentWriting)
-            
-            # print("Kill Signal True")
             
             # Write playlist object to disk
             with open(m3u8AbsolutePath, 'w') as file:
@@ -110,67 +124,90 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                
         # CURRENT BUG
         # At seemingly random, frame buffer will not empty and last frame will be written over and over forever? Somehow??
+        #
         # BUG FOUND: When encoder has no frames to give out when encoding None, it gives End Of File exception, solution
         # is to wrap this in a try statement
                 
         # Try to encode latestFrame and write resulting packets to mp4
         try:
-            # Grab latest frame from queue
-            latestFrame = rtspFrameQueue.get()
-            
-            # print("Latest frame: " + str(latestFrame))
-            
-            # Depending on frame grabbed, process diffrerently
-            # AUDIO
-            if isinstance(latestFrame, av.AudioFrame):
-                # Have audio frame, encode to mp3 audio and write to container
-                # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new containers PTS    
-                if firstAudioFramePTS is None:
-                    # Set first frame PTS
-                    firstAudioFramePTS = latestFrame.pts
+            # If we don't get a frame for 500 reads then assume RTSP pipe is broken and quit, supervisord will restart us
+            if frameQueueEmptyTracker >= 500:
                 
-                # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstAudioFramePTS)
-                latestFrame.pts -= firstAudioFramePTS
-                # print("New PTS: " + str(latestFrame.pts))
-                
-                # Encode frame to packet for muxxing into container
-                for packet in outputAudio.encode(latestFrame):
-                    outputContainer.mux(packet)
+                myPid = os.getpid()
+                os.kill(myPid, signal.SIGINT)
+                # Wait for death
+                time.sleep(10)
             
-            # VIDEO      
-            elif isinstance(latestFrame, av.VideoFrame):
-                # Have video frame, encode to h264 video and write to container   
-                # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new containers PTS     
-                if firstVideoFramePTS is None:
-                    # Set first frame PTS
-                    firstVideoFramePTS = latestFrame.pts
+            # Wait 0.01 seconds for frame, keeps up fine
+            time.sleep(0.01)
+            # If the frame queue is empty, do not attempt read and add to counter
+            if rtspFrameQueue.empty():
+                # Add one to tracker
+                frameQueueEmptyTracker += 1
+            else:
+                # Frame queue is not empty, reset fail read counter and grab frame to process
+                frameQueueEmptyTracker = 0
+                # Grab latest frame from queue
+                latestFrame = rtspFrameQueue.get()
+                # print("Latest frame: " + str(latestFrame))
                 
-                # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstVideoFramePTS)
-                latestFrame.pts -= firstVideoFramePTS
-                # print("New PTS: " + str(latestFrame.pts))
-
-                # Encode frame to packet for muxxing into container
-                for packet in outputVideo.encode(latestFrame):
-                    outputContainer.mux(packet)
+                # Depending on frame grabbed, process diffrerently
+                # AUDIO
+                if isinstance(latestFrame, av.AudioFrame):
+                    # Have audio frame, encode to mp3 audio and write to container
+                    # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new containers PTS    
+                    # if firstAudioFramePTS is None:
+                        # Set first frame PTS
+                        # firstAudioFramePTS = latestFrame.pts
                     
-            # print("Time elapsed: " + str(time.time() - startTime))
-            # Check if secondsToWrite have elapsed since start of write
-            if time.time() - startTime >= secondsToWrite:
-                # print("Time above quota")
-                # Close current output container and return True to signal write has finished
-                # Flush remianing packets to container
-                # This can fail if remainPackets is None, wrap in try statement so if fails we can close media
-                try:
-                    remainPackets = outputVideo.encode(None)
-                    outputContainer.mux(remainPackets)
-                except Exception as e:
-                    # print("Got exception in emptying encoder: " + str(e))
-                    pass
+                    # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstAudioFramePTS)
+                    # latestFrame.pts -= firstAudioFramePTS
+                    # print("New PTS: " + str(latestFrame.pts))
+                    
+                    # Encode frame to packet for muxxing into container
+                    for packet in outputAudio.encode(latestFrame):
+                        # print("Packet PTS: " + str(packet.pts))
+                        outputContainer.mux(packet)
                 
-                # Close container
-                outputContainer.close()
-                # Return true to break loop and show code completeled normally
-                return True
+                # VIDEO      
+                elif isinstance(latestFrame, av.VideoFrame):
+                    # Have video frame, encode to h264 video and write to container   
+                    # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new containers PTS     
+                    # if firstVideoFramePTS is None:
+                        # Set first frame PTS
+                        # firstVideoFramePTS = latestFrame.pts
+                    
+                    # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstVideoFramePTS)
+                    # latestFrame.pts -= firstVideoFramePTS
+                    # print("New PTS: " + str(latestFrame.pts))
+
+                    # Encode frame to packet for muxxing into container
+                    for packet in outputVideo.encode(latestFrame):
+                        outputContainer.mux(packet)
+                        
+                # print("Time elapsed: " + str(time.time() - startTime))
+                # Check if secondsToWrite have elapsed since start of write
+                if time.time() - startTime >= secondsToWrite:
+                    # print("Time above quota")
+                    # Close current output container and return True to signal write has finished
+                    # Flush remianing packets to container
+                    # This can fail if remainPackets is None, wrap in try statement so if fails we can close media
+                    try:
+                        remainPackets = outputVideo.encode(None)
+                        outputContainer.mux(remainPackets)
+                    except Exception as e:
+                        # print("Got exception in emptying encoder: " + str(e))
+                        pass
+        
+                    # Segment length based on amount of time frames was written
+                    durationEstimate = (time.time() - startTime)
+                    segmentWriting.duration = durationEstimate
+                    # Close container
+                    outputContainer.close()
+                    
+                    
+                    # Return true to break loop and show code completeled normally
+                    return True
             
         # If any issues occur with encoding, just pass and continue      
         except Exception as e:
@@ -204,8 +241,15 @@ def mainLoopingLogic():
     # Segment order should be in oldest to newest sequencial order, so it plays properly from m3u8 
     
     # Open RTSP Source and invdividual streams
-    # Implement if we cannot open RTSP path then we retry until we do
-    rtspSourceContainer = av.open(RTSP_PATHS_CAM1_SOURCE)
+    # Retry opening RTSP Source until we can
+    while True:
+        try:
+            rtspSourceContainer = av.open(RTSP_PATHS_CAM1_SOURCE)
+            break
+        except Exception as e:
+            time.sleep(0.5)
+            pass
+        
     templateVideo = rtspSourceContainer.streams.video[0]
     templateAudio = rtspSourceContainer.streams.audio[0]
     # Get info from streams
@@ -259,10 +303,10 @@ def mainLoopingLogic():
             # print("Writing segment: " + str(currentSegmentWriting))
 
             # Generate video path of video to write
-            videoFileAbsolutePath = (cameraDirectory + (camera_name_env + '_'+ str(currentSegmentWriting) + '.mp4'))
+            videoFileAbsolutePath = (cameraDirectory + (camera_name_env + '_'+ str(currentSegmentWriting) + '.' + formatContainerExtension))
 
             # Initialize output container
-            outputContainer = av.open((videoFileAbsolutePath), mode='w', format="mp4")
+            outputContainer = av.open((videoFileAbsolutePath), mode='w', format=formatContainerToUse)
             # AUDIO
             outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=44100)
             # VIDEO
@@ -324,7 +368,7 @@ def mainLoopingLogic():
             
             # Start writing new segment
             # Initialize output container
-            outputContainer = av.open((storedUriFromSegment), mode='w', format="mp4")
+            outputContainer = av.open((storedUriFromSegment), mode='w', format=formatContainerToUse)
             # AUDIO
             outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=44100)
             # VIDEO
