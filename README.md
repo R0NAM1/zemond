@@ -34,3 +34,7 @@ Zemond is great for the home, buisness or any other place that needs security. T
 - Premade groups for use immediently
 
 (Snapshots and promo crap, reference other git repos)
+
+# To Do:
+- ✓ Change M3u8FileWriter to use 1 minute segments and stop after remaining time in minute, forces it to stay locked to a minute
+- Main Camera View Change Style
