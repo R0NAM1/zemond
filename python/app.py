@@ -1,5 +1,5 @@
-import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, signal, dockerComposer # Have to import for just firstRun because of global weirdness
-import tracemalloc, logging, m3u8
+import cryptocode, av, websockets, time, ast, logging, cv2, sys, os, psycopg2, argparse, asyncio, json, logging, ssl, uuid, base64, queue, signal, threading, dockerComposer # Have to import for just firstRun because of global weirdness
+import tracemalloc, logging, m3u8, globalFunctions, psutil
 from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, request, session, flash, send_from_directory, Markup, make_response, jsonify, send_file, Response
 from flask_sock import Sock
@@ -28,7 +28,7 @@ from ptzHandler import readPTZCoords, sendContMovCommand, sendAuthenticatedPTZCo
 from twoWayAudio import streamBufferToRemote
 from userManagement import createUser, verifyDbUser, resetUserPass, verifyUserPassword, auditUser, cameraPermission, sendAuditLog
 from permissionTree import permissionTreeObject
-from webRtc import singleWebRtcStart, monWebRtcStart, stunServer
+from webRtc import singleWebRtcStart, monWebRtcStart, stunServer, rtcWatchdog
 
 app = Flask(__name__)
 login_manager = LoginManager(app)
@@ -71,17 +71,17 @@ def sigint_handler(signum ,frame):
     global sigint;
     sigint = True
     
-    for uuid in userUUIDAssociations:
-        iLoop = userUUIDAssociations[uuid][2]
-        iLoop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
-        time.sleep(1) # Wait one seconds for code to stop executing...
-        iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
-        del userUUIDAssociations[uuid]
+    # for uuid in userUUIDAssociations:
+    #     iLoop = userUUIDAssociations[uuid][2]
+    #     iLoop.stop() # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
+    #     time.sleep(1) # Wait one seconds for code to stop executing...
+    #     iLoop.close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
+    #     del userUUIDAssociations[uuid]
     
     # Cancel All Tasks
-    tasks = asyncio.all_tasks()
-    for task in tasks:
-        task.cancel()
+    # tasks = asyncio.all_tasks()
+    # for task in tasks:
+    #     task.cancel()
     
     sys.exit(0)
 
@@ -187,7 +187,7 @@ def dashboard():
         totalCamNum = len(localcameras)
         offlineCamNum = (totalCamNum - onlineCameraCache)
         # print(str(login_manager._login_disabled))
-        return render_template('dashboard.html', camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
+        return render_template('dashboard.html', threadsArray=globalFunctions.threadsArray, threadsActive=globalFunctions.threadsRunning, camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.dashboard", commit_id=commit_id, release_id=release_id)
 
@@ -722,6 +722,9 @@ def search_m3u8request():
             # Array to hold m3u8 strings
             m3u8StringArray = []
             
+            print("From " + str(fromDateObject))
+            print("To " + str(toDateObject))
+            
             # Loop to generate m3u8 data
             
             for cameraNameSpace in camerasToRetrieve:
@@ -735,10 +738,12 @@ def search_m3u8request():
                 m3u8AbsolutePath = ('/zemond-storage/' + cameraName + '/' + cameraName + '.m3u8')
                 m3u8PlaylistObject = m3u8.load(m3u8AbsolutePath)
 
+
                 # Loop through each segment, check if is within date range, if so add url to urllist in order
                 for segment in m3u8PlaylistObject.segments:
                     segmentDate = segment.program_date_time.replace(tzinfo=None)
                     if fromDateObject <= segmentDate <= toDateObject:
+                        # print(segmentDate)
                         urlList.append(segment.uri)
                         # How do I get server address? Use stunServer, should always be this zemond box
                         baseFileName = (os.path.basename(segment.uri))
@@ -748,7 +753,7 @@ def search_m3u8request():
                         segment.discontinuity = True
                         m3u8ObjectTextToSend.segments.append(segment)
                 
-                m3u8ObjectTextToSend.target_duration = 11
+                m3u8ObjectTextToSend.target_duration = 60
                 m3u8ObjectTextToSend.media_sequence = 0
                 m3u8ObjectTextToSend.playlist_type = 'VOD'
                 m3u8ObjectTextToSend.version = 3
@@ -1359,44 +1364,6 @@ def viewCamera(cam):
         return render_template('permission_denied.html', permissionString="permissionRoot.camera_list.view_camera, {0}".format(cam), commit_id=commit_id, release_id=release_id)
 
 # WEBRTC ===================================
-def uuidWatchdog():
-    # Make a regular thread that checks all added UUIDS, and the pingtime attatched.
-    # If pingtime is above set value, stop and close.
-    global userUUIDAssociations
-    
-    while True:
-        
-        if sigint == False:
-            
-            # Check every second
-            time.sleep(1)
-            # print(userUUIDAssociations)
-
-            # Loop through each UUID and check Pingtime
-            for uuid in userUUIDAssociations:
-                              
-                # print("Check UUID: " + uuid)
-                iPingtime = userUUIDAssociations[uuid][1]
-                # print("Found Pingtime: " + str(iPingtime))
-                diffTime = float(time.time()) - float(iPingtime)
-                # print("Diff time:" + str(diffTime))
-                                
-                if (diffTime > 5.0 and iPingtime > 0):
-                    print("Broken Watchdog, killing loop uuid: " + str(uuid))                  
-                    print("Running Threads Before: " + str(active_count()))
-                    (userUUIDAssociations[uuid][2].stop()) # This tells the Event Loop to stop executing code, but it does not CLOSE the loop! (Which leaves 1 cascading thread!)
-                    
-                    time.sleep(3)
-
-                    userUUIDAssociations[uuid][2].close() #  Close event loop, which reduces thread count back to what it was originally. <---- THIS WAS A BIG FIX
-                                        
-                    print("Running Threads After: " + str(active_count()))
-                    # Remove from userUUIDAssociations
-                    del userUUIDAssociations[uuid]
-                    break
-        else:
-            break;
-        
 # When we grab a WebRTC offer from out browser client for single camera.
 @app.route('/rtcoffer/<cam>', methods=['GET', 'POST'])
 @login_required
@@ -1418,15 +1385,17 @@ def webRTCOFFER(cam):
     rtcloop = asyncio.new_event_loop()
     
     # Add generated info to userUUIDAssociation
-    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], rtcPeer[5], dataChannel[6], microphoneStreamFuture[7] (7 appended)
+    # MODIFY SO 5 BECOMES the WEBRTC PEER and 6 is MICROPHONE
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, cam]
 
     # Get SDP from client and set set objects
     parsedSDP = userUUIDAssociations[thisUUID][2].run_until_complete(singleWebRtcStart(thisUUID, dockerIPString, cam, request))
-    
+        
     # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # Another thread so we don't block the code.
-    webRTCThread = Thread(target=userUUIDAssociations[thisUUID][2].run_forever)
+    # webRTCThread = Thread(target=userUUIDAssociations[thisUUID][2].run_forever)
+    webRTCThread = Thread(target=userUUIDAssociations[thisUUID][2].run_until_complete, args=(rtcWatchdog(thisUUID), ))
     webRTCThread.start()
     
     # Return Our Parsed SDP to the client
@@ -1534,18 +1503,19 @@ def offer_monitor(monitor):
         
     # # # Now create a timer that is reset by Ping-Pong.
     # Add generated info to userUUIDAssociation
-    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], microphoneStreamFuture[5] (5 appended)
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], webRtcPeer[5], microphoneStreamFuture[6] (6 appended)
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, monitor]
 
     # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
-    parsedSDP = rtcloop.run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray, ssrcAssoc))
+    parsedSDP = userUUIDAssociations[thisUUID][2].run_until_complete(monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray, ssrcAssoc))
     
     # Need to combine return SDP and ssrcAssoc into one piece of returnable data for monitor to use (Done already in monWebRtcStart)
     # I question everyday why WebRTC is the way it is, no wonder the existing tutorials are so lacking and soulless
         
     # # Continue running that loop forever to keep AioRTC Objects In Memory Executing, while shifting it to
     # # Another thread so we don't block the code.
-    webRTCThread = Thread(target=rtcloop.run_forever)
+    # webRTCThread = Thread(target=rtcloop.run_forever)
+    webRTCThread = Thread(target=userUUIDAssociations[thisUUID][2].run_until_complete, args=(rtcWatchdog(thisUUID), ))
     webRTCThread.start()
       
     # # # Return Our Parsed SDP to the client
@@ -1595,66 +1565,98 @@ def deleteCamera():
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.settings.delete_camera", commit_id=commit_id, release_id=release_id)
 
-
-def updateSnapshots():
-
-    while True:
+def loopWatchdogThread():
+    global userUUIDAssociations
+    # Thread to check every second if rtc uuid still exists if not close rtc loop and stop.
+    # Code will fail as loop itterator changes size often, 
+    while sigint == False:
+        time.sleep(1)
         
-        if sigint == False:
-            # This runs infinitly in another thread at program start,
-            # this gets a list of all the cameras, creates a string for each of them, (A Dictionary), then gets
-            # a snapshot of it, and stores it. They can be called anytime.
-
-            myCursor.execute("Select * from localcameras")
-            localcameras = myCursor.fetchall()
-
-            global snapshotCache
-            global onlineCameraCache
-            # Reset Temp Cache
-
-            tempCache = {}
-            tmpCameraCache = 0
-
-            for row in localcameras:
-                # Get Current Name
-                currentiname = row[0]
-                # Get Current IP
-                dockerIP = row[10]
-                # First Generate Snapshot, from docker container
+        try:
+            for uuid in userUUIDAssociations:    
+                if userUUIDAssociations[uuid][2].is_running() == False:
+                    # Close event loop to close threads
+                    userUUIDAssociations[uuid][2].close()
+                    
+                    # Remove from userUUIDAssociations
+                    del userUUIDAssociations[uuid]
+        except:
+            pass
+        
+        # Do variable updates, doing here so I don't have to open another thread.
+        # Variables to show on Dashboard.
+        # Amount of threads and threads open:
+        
+        globalFunctions.threadsRunning = str(active_count())
+        
+        # Empty array
+        globalFunctions.threadsArray = []
+        # Itterate over array
+        for thread in threading.enumerate():
+            globalFunctions.threadsArray.append(str(thread))
             
-                # Assemble Credential Based RTSP URL
-                dockerRtspUrl = ("rtsp://" + dockerIP + ":8554/cam1")
-                os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
-                cap = cv2.VideoCapture(dockerRtspUrl)
+        # System CPU
+        # System Memory
+            
+def updateSnapshots():
+    # Update the snapshots in the camera list
+    while True:
+        try:
+            if sigint == False:
+                # This runs infinitly in another thread at program start,
+                # this gets a list of all the cameras, creates a string for each of them, (A Dictionary), then gets
+                # a snapshot of it, and stores it. They can be called anytime.
 
-                if not cap.isOpened():
-                    # print('Cannot open RTSP stream')
-                    # Assuming that docker container isn't started, just break the loop then try again.
-                    break
-                else:
-                    readquestion, frame = cap.read()
-                    # print("Got Snapshot for " + currentiname)
-                    # This means the camera is online, to put it simply. Add this to a counter.
-                    tmpCameraCache = tmpCameraCache + 1
-                    cap.release()
+                myCursor.execute("Select * from localcameras")
+                localcameras = myCursor.fetchall()
 
-                try:
-                    _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
-                except:
-                    break
-                im_bytes = im_arr.tobytes()
-                im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
+                global snapshotCache
+                global onlineCameraCache
+                # Reset Temp Cache
 
-                # Add data to dictionary as Name : IMG
-                tempCache[currentiname]=im_b64
+                tempCache = {}
+                tmpCameraCache = 0
 
-            snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
-            onlineCameraCache = tmpCameraCache;
-            # print("Running Threads: " + str(active_count())) # We currently don't ever stop the started threads as
-            # print("Is sigint? " + str(sigint))
-            time.sleep(8) # Time to wait between gathering snapshots
-        else:
-            break;
+                for row in localcameras:
+                    # Get Current Name
+                    currentiname = row[0]
+                    # Get Current IP
+                    dockerIP = row[10]
+                    # First Generate Snapshot, from docker container
+                
+                    # Assemble Credential Based RTSP URL
+                    dockerRtspUrl = ("rtsp://" + dockerIP + ":8554/cam1")
+                    os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
+                    cap = cv2.VideoCapture(dockerRtspUrl)
+
+                    if not cap.isOpened():
+                        # print('Cannot open RTSP stream')
+                        # Assuming that docker container isn't started, just break the loop then try again.
+                        break
+                    else:
+                        readquestion, frame = cap.read()
+                        # print("Got Snapshot for " + currentiname)
+                        # This means the camera is online, to put it simply. Add this to a counter.
+                        tmpCameraCache = tmpCameraCache + 1
+                        cap.release()
+
+                    try:
+                        _, im_arr = cv2.imencode('.jpg', frame)  # im_arr: image in Numpy one-dim array format.
+                    except:
+                        break
+                    im_bytes = im_arr.tobytes()
+                    im_b64 = base64.b64encode(im_bytes).decode("utf-8") # Base 64 Snapshot
+
+                    # Add data to dictionary as Name : IMG
+                    tempCache[currentiname]=im_b64
+
+                snapshotCache = tempCache; # When temp Cache is finished filling, finalize it.
+                onlineCameraCache = tmpCameraCache;
+                time.sleep(15) # Time to wait between gathering snapshots
+            else:
+                break;
+        except:
+            pass
 
 def startWebClient():
     # Testing Web Server
@@ -1681,6 +1683,10 @@ if __name__ == '__main__':
     dockerThread = Thread(target=dockerWatcher)
     dockerThread.start()
     
+    # Start loop watcher thread, if one is stopped, close it!
+    loopWatchdogThreaden = Thread(target=loopWatchdogThread)
+    loopWatchdogThreaden.start()
+    
     # Start rest of program after docker containers start
     
     while (dockerComposer.firstRunDockerCheck == False):
@@ -1692,10 +1698,6 @@ if __name__ == '__main__':
         # Start Snapshot Thread.
         snapshotThread = Thread(target=updateSnapshots)
         snapshotThread.start()
-        
-        # UUID Pingtime watchdog thread, if any ping is above set threashold, grab rtcloop object and stop
-        uuidWatchdog = Thread(target=uuidWatchdog) # Create a watchdog that takes the UUID and Event Loop
-        uuidWatchdog.start()
         
         # Register SIGINT Handler
         signal.signal(signal.SIGINT, sigint_handler)

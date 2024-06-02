@@ -19,8 +19,11 @@ class VideoCameraPlayerTrack(MediaStreamTrack):
         
     # Consumer wants frame, get latest from CameraPlayer, or return blank.
     async def recv(self):
-        return self.cameraplayer.videoFrameBuffer
-
+        while True:
+            try:
+                return self.cameraplayer.videoFrameBuffer
+            except:
+                pass
                
            
                
@@ -35,36 +38,42 @@ class AudioCameraPlayerTrack(MediaStreamTrack):
         self._firstRead = False
     # Consumer wants frame, get latest from CameraPlayer.
     async def recv(self):
-        # Wait so we don't overread the buffer
-        if self._firstRead == False:
-            self._firstRead = True
-            time.sleep(0.2)
-        # We read to fast, found waiting for this long keeps the reader and writers indexes pretty consistant, don't need to complicate this
-        # further! We lose about 4 frames every wrap, but is worth it.
-        time.sleep(0.021)
-        # Check if need to reset to player index, and set curr index
-        if (self.cameraplayer.audioFrameBufferEOL and self._bufferIndex != 0):
-            # If buffer rest and my index is not zero, set zero and return new frame
-            self._bufferIndex = 0
-            return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
-        elif (self._bufferIndex > self.cameraplayer.audioFrameBufferIndex):
-            # If overrunning buffer, go back two frames, can likely remove though
-            #If reading above index, rewind one
-            self._bufferIndex -= 5
-            return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
-        else:
-            # Get frame from buffer and increase index
-            frame = self.cameraplayer.audioFrameBuffer[self._bufferIndex]
-            self._bufferIndex += 1
-            return frame
+        while True:
+            try:
+                # Wait so we don't overread the buffer
+                if self._firstRead == False:
+                    self._firstRead = True
+                    time.sleep(0.2)
+                # We read to fast, found waiting for this long keeps the reader and writers indexes pretty consistant, don't need to complicate this
+                # further! We lose about 4 frames every wrap, but is worth it.
+                time.sleep(0.021)
+                # Check if need to reset to player index, and set curr index
+                if (self.cameraplayer.audioFrameBufferEOL and self._bufferIndex != 0):
+                    # If buffer rest and my index is not zero, set zero and return new frame
+                    self._bufferIndex = 0
+                    return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+                elif (self._bufferIndex > self.cameraplayer.audioFrameBufferIndex):
+                    # If overrunning buffer, go back two frames, can likely remove though
+                    #If reading above index, rewind one
+                    self._bufferIndex -= 5
+                    return self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+                else:
+                    # Get frame from buffer and increase index
+                    frame = self.cameraplayer.audioFrameBuffer[self._bufferIndex]
+                    self._bufferIndex += 1
+                    return frame
+            except Exception as e:
+                # print("Audio track exception: " + str(e))
+                pass
                       
 # Modified Media Player
 class CameraPlayer():
-    def __init__(self, dockerIp, decode=True, newWidth=(1280), newHeight=(720)):
+    def __init__(self, dockerIp, cameraName, decode=True, newWidth=(1280), newHeight=(720)):
         av.logging.set_level(av.logging.PANIC)
         self.__container = av.open(file="rtsp://" + dockerIp + ":8554/cam1", mode="r", options={'hwaccel': 'auto'}) # Open Cam Stream
         self.__thread: Optional[threading.Thread] = None # Thread to get frames
         self.__thread_quit: Optional[threading.Event] = None # Thread end event
+        self.cameraName = cameraName
         vFrame = VideoFrame(width=1280, height=720)
         vFrame.pts = 0
         vFrame.time_base = '1/90000'
@@ -108,7 +117,7 @@ class CameraPlayer():
         if self.__thread is None:
             self.__thread_quit = Event()
             self.__thread = Thread(
-                name="camera-player",
+                name=("camera-player-" + self.cameraName),
                 target=player_worker_decode,
                 args=(
                     asyncio.get_event_loop(),
@@ -168,7 +177,7 @@ def player_worker_decode(loop, container, streams, cameraplayer, quit_event, thr
     
 
     # While my quit event isn't set
-    while not quit_event.is_set(): 
+    while not quit_event.is_set():
         try:
             # Get next frame from the container streams
             frame = next(container.decode(*streams))
