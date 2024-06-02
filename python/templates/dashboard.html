@@ -1,12 +1,24 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
+    <script type="module" src="{{url_for('static', filename='js/dashboard.js')}}"></script>
+
+    <script type="text/javascript">
+        var threadsArray = '{{ threadsArray }}'
+    </script>
+
     <h1>{% block title %}  {% endblock %}</h1>
     <h1>Online Camera's: </h1>
     <h1>{{ camerasonline }}</h1>
 
     <h1>Offline Camera's: </h1>
     <h1>{{ offlineCamNum }}</h1>
+
+    <div id="threadsDropdown">
+        <label for="dropdown">{{ threadsActive }}</label>
+        <select id="tdropdown"></select>
+    </div>
     
 
 {% endblock %}

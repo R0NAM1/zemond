@@ -61,4 +61,16 @@
 
 body {
   background-color: #424242;
+  color: whitesmoke;
 }
+
+body a {
+  color: whitesmoke;
+  transition: 50ms;
+}
+
+body a:hover {
+  color: rgb(127, 160, 189);
+}
+
+
