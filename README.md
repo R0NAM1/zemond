@@ -37,4 +37,13 @@ Zemond is great for the home, buisness or any other place that needs security. T
 
 # To Do:
 - ✓ Change M3u8FileWriter to use 1 minute segments and stop after remaining time in minute, forces it to stay locked to a minute
+- ✓ Fix AioRTC left over tasks
+- Add Used Threads, Ram CPU and Amount of Clients On Dashboard
+- Fix Timeline head positioning to keep both videos in sync, change based on length and use that timestamp to set all videos,
 - Main Camera View Change Style
+- Finish timeline viewer with exporter
+- Add Timeline Player ghost controls, go away after 2 seconds or mouse off
+- Figure out variable time marker for player according to percentage or something?
+- Add 32x and 64x for timeline viewer
+- Have AioRTC cameraViewers stop if no clients for one minute or so
+- Add time check to WebRTC code to reload page if midnight, to prevent Server Side Qlong integer overflow

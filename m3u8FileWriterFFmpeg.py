@@ -86,9 +86,19 @@ def writeFramesToQueue(inputContainer, rtspFrameQueue):
             
             if discardFrames == False:
                 rtspFrameQueue.put(frame)
+                
+            # Check how big frame queue is, if above 500 packets then kill to prevent memory overflow
+            if rtspFrameQueue.qsize() > 300:
+                print("RTSP Queue size above 300, killing to prevent memory overflow!")
+                myPid = os.getpid()
+                os.kill(myPid, signal.SIGINT)
+                # Wait for death
+                time.sleep(10)            
+            # Log something about how a buffer overran and details
+            # Before UnComment find current overflow issue
             
     except Exception as e:
-        print("Exception in writting to frame queue: " + str(e))
+        # print("Exception in writting to frame queue: " + str(e))
         pass
             
 # Main thread function to write next frame in queue to output container
@@ -122,8 +132,8 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
             # Make proper changes to m3u8
             
             # Get duration of container just written, set in segment
-            durationEstimate = (time.time() - startTime)
-            segmentWriting.duration = durationEstimate
+            # durationEstimate = round(time.time() - startTime)
+            segmentWriting.duration = 60
             
             # Append to playlist object
             m3u8Playlist.segments.append(segmentWriting)
@@ -143,7 +153,7 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
         try:
             # If we don't get a frame for 500 reads then assume RTSP pipe is broken and quit, supervisord will restart us
             if frameQueueEmptyTracker >= 5000:
-                
+                print("Empty for 5000 frames!")
                 myPid = os.getpid()
                 os.kill(myPid, signal.SIGINT)
                 # Wait for death
@@ -163,8 +173,8 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                     pass
     
                 # Segment length based on amount of time frames was written
-                durationEstimate = (time.time() - startTime)
-                segmentWriting.duration = durationEstimate
+                # durationEstimate = round(time.time() - startTime)
+                segmentWriting.duration = 60
                 # Close container
                 outputContainer.close()
                 
@@ -180,12 +190,14 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
             else:
                 # Frame queue is not empty, reset fail read counter and grab frame to process
                 frameQueueEmptyTracker = 0
+
                 # Grab latest frame from queue
                 latestFrame = rtspFrameQueue.get()
                 # print("Latest frame: " + str(latestFrame))
                 # print("Frame Count: " + str(frameCounter))
+
                 frameCounter += 1
-                print(datetime.datetime.now())
+                # print(datetime.datetime.now())
                 
                 # Depending on frame grabbed, process diffrerently
                 # AUDIO
@@ -330,6 +342,8 @@ def mainLoopingLogic():
             # Get start time for video, add to segment program_date_time, is tag EXT-X-PROGRAM-DATE-TIME
             segment.program_date_time = datetime.datetime.now()
             
+            # Wait half a second,
+            time.sleep(1)
             # Write video to disk using frames from rtspFrameQueue
             # print("Writing Video to disk!")
             writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo, outputContainer, videoTimeBase, 60, segment, m3u8PlaylistObject, m3u8AbsolutePath)
@@ -391,7 +405,9 @@ def mainLoopingLogic():
             
             # Get start time for video
             segment.program_date_time = datetime.datetime.now()
-            
+                        
+            # Wait half a second,
+            time.sleep(1)
             # Write video to disk from queue
             # print("Writing Video to disk!")
             writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo, outputContainer, videoTimeBase, 60, segment, m3u8PlaylistObject, m3u8AbsolutePath)            
