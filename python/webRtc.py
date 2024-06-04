@@ -291,7 +291,7 @@ async def monWebRtcStart(request, thisUUID, dockerIpArray, formatCamArray, ssrcA
         
         # print("Adding cameraPlayer: " + dockerIpArray[i])
         
-        cameraPlayer = requestCameraPlayer(dockerIpArray[i])
+        cameraPlayer = requestCameraPlayer(dockerIpArray[i], cam)
         camVideoTrack = VideoCameraPlayerTrack(cameraPlayer, thisUUID)
         
         if (camVideoTrack):

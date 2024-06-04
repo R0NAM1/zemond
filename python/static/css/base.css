@@ -55,8 +55,9 @@
 }
 
 #main-content {
-  padding-top: 100px;
-  padding-bottom: 5%;
+  position: relative;
+  top: 100px;
+  padding-top: 25px;
 }
 
 body {

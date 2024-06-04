@@ -187,7 +187,7 @@ def dashboard():
         totalCamNum = len(localcameras)
         offlineCamNum = (totalCamNum - onlineCameraCache)
         # print(str(login_manager._login_disabled))
-        return render_template('dashboard.html', threadsArray=globalFunctions.threadsArray, threadsActive=globalFunctions.threadsRunning, camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
+        return render_template('dashboard.html', userArray=globalFunctions.sessionsArray, systemCpu=globalFunctions.systemCpu, systemMem=globalFunctions.systemMem, threadsArray=globalFunctions.threadsArray, threadsActive=globalFunctions.threadsRunning, camerasonline=onlineCameraCache, offlineCamNum=offlineCamNum, commit_id=commit_id, release_id=release_id) #onlineCameraCache current amount of cameras
     else:
         return render_template('permission_denied.html', permissionString="permissionRoot.dashboard", commit_id=commit_id, release_id=release_id)
 
@@ -1356,7 +1356,7 @@ def viewCamera(cam):
         # Onvif Events: Time | Topic | Data
         # Get Onvif Events:
 
-        myCursor.execute("Select * from cameraevents where name = '{0}' ORDER BY messagetime DESC;".format(cam))
+        myCursor.execute("Select * from cameraevents where name = '{0}' AND messagetime >= now() - INTERVAL '7 days' ORDER BY messagetime DESC;".format(cam))
         rawOnvifQuery = myCursor.fetchall()
 
         return render_template('view_camera.html', data=camdata, onvifevents=rawOnvifQuery, commit_id=commit_id, release_id=release_id, hasTWA=hasTwa[0])  
@@ -1503,7 +1503,7 @@ def offer_monitor(monitor):
         
     # # # Now create a timer that is reset by Ping-Pong.
     # Add generated info to userUUIDAssociation
-    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], webRtcPeer[5], microphoneStreamFuture[6] (6 appended)
+    # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4], webRtcPeer[5], rtcDataChannel[6], microphoneStreamFuture[7] (7 appended)
     userUUIDAssociations[thisUUID] = [thisUser, 0, rtcloop, False, monitor]
 
     # Get parsed SDP from monWebRTC which creates all the monitor players from dockerIpArray
@@ -1593,10 +1593,26 @@ def loopWatchdogThread():
         globalFunctions.threadsArray = []
         # Itterate over array
         for thread in threading.enumerate():
-            globalFunctions.threadsArray.append(str(thread))
+            # strToDe = (str(thread.name) + " | " + str(thread._target)) 
+            globalFunctions.threadsArray.append(str(thread.name))
             
         # System CPU
+        globalFunctions.systemCpu = str(psutil.cpu_percent()) + "%"
+        
         # System Memory
+        globalFunctions.systemMem = str(psutil.virtual_memory().percent) + "%"
+        
+        # User sessions
+        globalFunctions.sessionsArray = []
+        for sessionUUID in userUUIDAssociations:
+        # UUID, user[0], pingtime[1], rtcloopObject[2], userInTrackControl[3], camName[4],
+        # webRtcPeer[5], rtcDataChannel[6], microphoneStreamFuture[7] (7 appended)
+            
+            stringToPush = (str(userUUIDAssociations[sessionUUID][0]) + " | " + 
+                            str(userUUIDAssociations[sessionUUID][4]) + " | Has Control: " + 
+                            str(userUUIDAssociations[sessionUUID][3]))
+            
+            globalFunctions.sessionsArray.append(stringToPush)
             
 def updateSnapshots():
     # Update the snapshots in the camera list

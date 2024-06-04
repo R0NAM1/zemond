@@ -3,21 +3,43 @@
 {% block content %}
 
     <script type="module" src="{{url_for('static', filename='js/dashboard.js')}}"></script>
+    <link rel="stylesheet" href="{{url_for('static', filename='css/dashboard.css')}}">
 
     <script type="text/javascript">
         var threadsArray = '{{ threadsArray }}'
+        window.threadsArray = threadsArray;
+
+        var sessionsArray = '{{ userArray }}'
+        window.sessionsArray = sessionsArray;
     </script>
 
-    <h1>{% block title %}  {% endblock %}</h1>
-    <h1>Online Camera's: </h1>
-    <h1>{{ camerasonline }}</h1>
+    <div id="camstats" class="statsBlock">
+        <h2>{% block title %}  {% endblock %}</h2>
+        <h2 class="subhead">Online Camera's: </h2>
+        <h2 class="subdata">{{ camerasonline }}</h2>
+        
+        <h2 class="subhead">Offline Camera's: </h2>
+        <h2 class="subdata">{{ offlineCamNum }}</h2>
+    </div>
 
-    <h1>Offline Camera's: </h1>
-    <h1>{{ offlineCamNum }}</h1>
+    <div id="threadstats" class="statsBlock">
+        <h2 class="subhead">Running Threads: {{ threadsActive }}</h2>
+        <div id="threadsactiveDropdown">
+        </div>
+    </div>
 
-    <div id="threadsDropdown">
-        <label for="dropdown">{{ threadsActive }}</label>
-        <select id="tdropdown"></select>
+    <div id="sysstats" class="statsBlock">
+        <h2 class="subhead-block">Host System Status</h2>
+
+        <h2 class="subdata">CPU: {{ systemCpu }}</h2>
+
+        <h2 class="subdata">RAM: {{ systemMem }}</h2>
+    </div>
+
+    <div id="userstats" class="statsBlock">
+        <h2 id ="userhead" class="subhead">User Sessions: 0</h2>
+        <div id="userDropdown">
+        </div>
     </div>
     
 

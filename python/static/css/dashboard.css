@@ -1,0 +1,70 @@
+.statsBlock {
+    display: inline-block;
+    text-align: center;
+    box-shadow: 4px 4px rgb(75, 75, 75);
+    border: 5px solid  rgb(130, 130, 130);
+    border-radius: 25px;
+    background-color: rgb(130, 130, 130);
+    width: auto;
+    height: auto;
+    padding: 15px;
+    margin: 25px;
+    overflow-y: scroll;
+    top: 5px;
+}
+
+.subhead {
+    display: inline-block;
+    position: sticky top;
+    background-color: rgb(100, 100, 100);
+    padding: 10px;
+    border-radius: 15px;
+    margin: 0;
+    overflow-inline: hidden;
+}
+
+.subhead-block {
+    display: block;
+    position: sticky top;
+    background-color: rgb(100, 100, 100);
+    padding: 10px;
+    border-radius: 15px;
+    margin-bottom: 15px;
+    overflow-inline: hidden;
+}
+
+.subdata {
+    display: block;
+    text-align: center;
+    background-color: rgb(100, 100, 100);
+    padding: 5px;
+    border-radius: 15px;
+}
+
+.subdataThreads {
+    display: block;
+    text-align: center;
+    background-color: rgb(100, 100, 100);
+    padding: 5px;
+    border-radius: 15px;
+    margin: 5px;
+}
+
+.subdataUsers {
+    display: block;
+    text-align: center;
+    background-color: rgb(100, 100, 100);
+    padding: 5px;
+    border-radius: 15px;
+    margin: 5px;
+}
+
+#threadsactiveDropdown {
+    margin: 15px;
+    overflow-y: scroll;
+}
+
+#threadstats {
+    height: 295px;
+    width: 270px;
+}
