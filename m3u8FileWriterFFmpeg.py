@@ -13,10 +13,14 @@ global killSignal, frameQueueEmptyTracker, discardFrames
 
 # Some basic settings below, including what video encoder to use (libx265 by default), and audio encoder.
 directOutputToDockerLog = True # Also just STDOUT and STDERR, basically does script output text?
-audioEncoderToUse = 'mp3' # Basic audio codec, nothing special
-videoEncoderToUse = 'libx264' # Valid options: libx265, libx264, only use h265 if your browser supports it, Chrome should
-formatContainerToUse = 'mpegts' # Livestreamable chunked format, so the browser can recall footage
-formatContainerExtension = 'ts' # That chuncked format extension
+audioEncoderToUse = 'aac' # Basic audio codec, nothing special
+videoEncoderToUse = 'libsvtav1' # Valid options: libx265, libx264, libsvtav1, only use h265 if your browser supports it, Chrome should
+videoEncoderOptions = {'svtav1-params': 'tune=0 film-grain=10', 'preset': '12', 'g': '120', 'crf': '35', 'maxrate': '2M', 'bufsize': '4M'} # libsvtav1
+# videoEncoderToUse = 'libx264'
+# videoEncoderOptions = {'preset': 'faster', 'g': '120', 'crf': '35', 'maxrate': '2M', 'bufsize': '4M'} # libx264
+formatContainerToUse = 'mp4' # Livestreamable chunked format, so the browser can recall footage
+formatContainerExtension = 'mp4' # That chuncked format extension
+containerOptions = {'movflags': '+dash+faststart'}
 frameQueueEmptyTracker = 0 # If we don't get a frame X amount of times, kill program
 discardFrames = True
 
@@ -84,12 +88,13 @@ def writeFramesToQueue(inputContainer, rtspFrameQueue):
             # Originally broke this if killSignal was detected, but broke parent thread when this broke! So just break parent thread and have this one exit naturally 
             # Write next frame to queue from inputContainer
             
+            print(rtspFrameQueue.qsize())
             if discardFrames == False:
                 rtspFrameQueue.put(frame)
                 
             # Check how big frame queue is, if above 500 packets then kill to prevent memory overflow
-            if rtspFrameQueue.qsize() > 300:
-                print("RTSP Queue size above 300, killing to prevent memory overflow!")
+            if rtspFrameQueue.qsize() > 1000:
+                print("RTSP Queue size above 1000, killing to prevent memory overflow!")
                 myPid = os.getpid()
                 os.kill(myPid, signal.SIGINT)
                 # Wait for death
@@ -152,8 +157,8 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
         # Try to encode latestFrame and write resulting packets to mp4
         try:
             # If we don't get a frame for 500 reads then assume RTSP pipe is broken and quit, supervisord will restart us
-            if frameQueueEmptyTracker >= 5000:
-                print("Empty for 5000 frames!")
+            if frameQueueEmptyTracker >= 10000:
+                print("Empty for 10000 frames!")
                 myPid = os.getpid()
                 os.kill(myPid, signal.SIGINT)
                 # Wait for death
@@ -203,7 +208,14 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                 # AUDIO
                 if isinstance(latestFrame, av.AudioFrame):
                     # Have audio frame, encode to mp3 audio and write to container
-                    
+                    # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new containers PTS     
+                    if firstAudioFramePTS is None:
+                        # Set first frame PTS
+                        firstAudioFramePTS = latestFrame.pts
+ 
+                    # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstAudioFramePTS)
+                    latestFrame.pts -= firstAudioFramePTS
+
                     # Encode frame to packet for muxxing into container
                     for packet in outputAudio.encode(latestFrame):
                         # print("Packet PTS: " + str(packet.pts))
@@ -212,7 +224,13 @@ def writeFromQueueToContainerForSeconds(rtspFrameQueue, outputAudio, outputVideo
                 # VIDEO      
                 elif isinstance(latestFrame, av.VideoFrame):
                     # Have video frame, encode to h264 video and write to container   
-
+                    # PTS Reset code, first frame PTS from queue is set, then is used as offset for setting new firstVideoFramePTS PTS     
+                    if firstVideoFramePTS is None:
+                        # Set first frame PTS
+                        firstVideoFramePTS = latestFrame.pts
+ 
+                    # Set this frames PTS to the offset of first frame (latestFrame.pts = latestFrame.pts - firstVideoFramePTS)
+                    latestFrame.pts -= firstVideoFramePTS
                     # Encode frame to packet for muxxing into container
                     for packet in outputVideo.encode(latestFrame):
                         outputContainer.mux(packet)
@@ -326,11 +344,11 @@ def mainLoopingLogic():
             videoFileAbsolutePath = (cameraDirectory + (camera_name_env + '_'+ str(currentSegmentWriting) + '.' + formatContainerExtension))
 
             # Initialize output container
-            outputContainer = av.open((videoFileAbsolutePath), mode='w', format=formatContainerToUse)
+            outputContainer = av.open((videoFileAbsolutePath), mode='w', format=formatContainerToUse, options=containerOptions)
             # AUDIO
-            outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=44100)
+            outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=audioSampleRate)
             # VIDEO
-            outputVideo = outputContainer.add_stream(videoEncoderToUse, rate=videoAvgRate, options={'x265-params': 'log_level=none'})
+            outputVideo = outputContainer.add_stream(videoEncoderToUse, rate=videoAvgRate, options=videoEncoderOptions)
             outputVideo.width = videoWidth
             outputVideo.height = videoHeight
             outputVideo.pix_fmt = videoFormat
@@ -390,11 +408,11 @@ def mainLoopingLogic():
             
             # Start writing new segment
             # Initialize output container
-            outputContainer = av.open((storedUriFromSegment), mode='w', format=formatContainerToUse)
+            outputContainer = av.open((storedUriFromSegment), mode='w', format=formatContainerToUse, options=containerOptions)
             # AUDIO
-            outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=44100)
+            outputAudio = outputContainer.add_stream(audioEncoderToUse, rate=audioSampleRate)
             # VIDEO
-            outputVideo = outputContainer.add_stream(videoEncoderToUse, rate=videoAvgRate, options={'x265-params': 'log_level=none'})
+            outputVideo = outputContainer.add_stream(videoEncoderToUse, rate=videoAvgRate, options=videoEncoderOptions)
             outputVideo.width = videoWidth
             outputVideo.height = videoHeight
             outputVideo.pix_fmt = videoFormat

@@ -38,6 +38,7 @@ Zemond is great for the home, buisness or any other place that needs security. T
 # To Do:
 - ✓ Change M3u8FileWriter to use 1 minute segments and stop after remaining time in minute, forces it to stay locked to a minute
 - ✓ Fix AioRTC left over tasks
+- Have encoding options available through HTTP and modified with env vars in the m3u8 script.
 - Add Used Threads, Ram CPU and Amount of Clients On Dashboard
 - Fix Timeline head positioning to keep both videos in sync, change based on length and use that timestamp to set all videos,
 - Main Camera View Change Style
@@ -47,3 +48,9 @@ Zemond is great for the home, buisness or any other place that needs security. T
 - Add 32x and 64x for timeline viewer
 - Have AioRTC cameraViewers stop if no clients for one minute or so
 - Add time check to WebRTC code to reload page if midnight, to prevent Server Side Qlong integer overflow
+- Make database calls own file with try and catchs
+- Alarm & silent alarm mode that sends notifications, and/or activates sirens and can send network request or serial data to physcial security system box
+- Ai detection plugin that uses npu(s) and custom user uploadable models
+
+(May have to use)
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; media-src 'self' blob: data:;">
