@@ -4,8 +4,9 @@
 {% block content %}
 <h1>{% block title %}  {% endblock %}</h1>
 
+
 <script type="module" src="{{url_for('static', filename='js/search.js')}}"></script>
-<script type="module" src="{{url_for('static', filename='node_modules/hls.js/dist/hls.js')}}"></script>
+<script src="{{url_for('static', filename='node_modules/mp4box/dist/mp4box.all.min.js')}}"></script>
 <link rel="stylesheet" href="{{url_for('static', filename='css/search.css')}}">
 
 <script type="text/javascript">
@@ -18,61 +19,54 @@
     window.submitQueryToServer = submitQueryToServer;
 </script>
 
-<div id="videoContainer">
-</div>
-
-<div id="playPauseButtonContainer">
-    <div id="playPauseButton">
-    </div>
-    <div id="exportButton">
-    </div>
-</div>
-
-<div id='videoScrubberContainer'>
-
-    <div id="cameraListScrub">
-        <table id="cameraTable">
-        </table>
+    <div id="videoContainer">
     </div>
 
-    <div id="videoScrubberBox">
-        <div id="videoScrubberTriangle">
-            <div id="videoScrubberHandle">
-            </div>
+    <div id="leftSideParent">
+        <div id="leftSideCollapseButton">
+            <img id="collapseButton" width="30px" src="{{url_for('static', filename='shelf.png')}}">
         </div>
+        
+        <div id="leftSidePopup">
+            
+            <div id="step1selectcameras">
+                <h4>Step 1: Select Cameras</h4>
+            </div>
+            
+            <div id="step2selecttime">
+                <h4>Step 2: Select Time Span</h4>
+                <h4>From:</h4>
+                <input type="datetime-local" id="datetimefrom">
+                <h4>To:</h4>
+                <input type="datetime-local" id="datetimeto">
+            </div>
+            
+            <div id="step3submittoserver">
+                <h4>Step 3: Submit</h4>
+            <input type="button" value="Submit" onclick="window.submitQueryToServer()">
+        </div>
+        
+        <div id="playbackSpeed">
+            <h4 id="playbackText"> Playback Speed: </h4>
+            <select id='playBackSpeedSelect'>
+                <option value="1x">1x</option>
+                <option value="2x">2x</option>
+                <option value="4x">4x</option>
+                <option value="8x">8x</option>
+                <option value="16x">16x</option>
+            </select>
+        </div>
+        
     </div>
 </div>
 
-<div id="leftSidePopup">
-
-    <div id="step1selectcameras">
-        <h4>Step 1: Select Cameras</h4>
+<div id="bottomTimelineControlsParent">
+    <div id="bottomTimelineControls">
+    
     </div>
-
-    <div id="step2selecttime">
-        <h4>Step 2: Select Time Span</h4>
-        <h4>From:</h4>
-        <input type="datetime-local" id="datetimefrom">
-        <h4>To:</h4>
-        <input type="datetime-local" id="datetimeto">
+    <div id="playerControls">
+        
     </div>
-
-    <div id="step3submittoserver">
-        <h4>Step 3: Submit</h4>
-        <input type="button" value="Submit" onclick="window.submitQueryToServer()">
-    </div>
-
-    <div id="playbackSpeed">
-        <h4 id="playbackText"> Playback Speed: </h4>
-        <select id='playBackSpeedSelect'>
-            <option value="1x">1x</option>
-            <option value="2x">2x</option>
-            <option value="4x">4x</option>
-            <option value="8x">8x</option>
-            <option value="16x">16x</option>
-        </select>
-    </div>
-
 </div>
 
 {% endblock %}

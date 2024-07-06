@@ -8,11 +8,16 @@ body {
     padding: 0;
 }
 
+#main-content {
+    top: 90px !important;
+    user-select: none;
+}
+
 #videoContainer {
     position: fixed;
     top: 120px;
-    bottom: calc(43px + 100px);
-    left: 250px;
+    bottom: calc(57px + 100px);
+    left: 255px;
     background-image: linear-gradient(rgb(88, 88, 88), rgb(10, 10, 10));
     right: 0px;
     color: whitesmoke;
@@ -23,8 +28,121 @@ body {
 }
 
 #videoContainer video {
-    border: 5px solid black;
+    border-top: 5px solid black;
+    border-bottom: 5px solid black;
+    box-sizing: border-box;
 }
+
+
+#leftSidePopup {
+    position: fixed;
+    top: 120px;
+    bottom: 43px;
+    left: 0;
+    background-color: rgb(184, 121, 121);
+    border-right: 5px solid black;
+    border-bottom: 5px solid black;
+    width: 250px;
+    color: whitesmoke;
+    margin-right: 5px;
+    transition: display 0.5s ease;
+}
+
+#collapseButton:hover {
+    cursor: pointer;
+}
+
+#leftSideCollapseButton {
+    background-color: rgb(102, 102, 102);
+    border-right: 5px solid black;
+    border-bottom: 5px solid black;
+    border-top: 5px solid black;
+    z-index: 99;
+    position: relative;
+    height: 30px;
+    width: 30px;
+    left: 230px;
+    top: 25px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+#leftSideParent {
+    position: absolute;
+    top: 0px;
+    padding: 20px;
+}
+
+label {
+    color: whitesmoke;
+}
+
+#step1selectcameras {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    /* Magic sauce for this scroll space, 100% of the view height offset by 550px, which works for some reason */
+    height: calc(100vh -  545px);
+    top: 0px;
+    width: 100%;
+    bottom: 375px;
+    text-align: center;
+    overflow-y: auto;
+}
+
+#step2selecttime {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    height: 275px;
+    width: 100%;
+    border-top: 5px solid black;
+    bottom: 100px;
+    text-align: center;
+}
+
+#step3submittoserver {
+    position: absolute;
+    background-color: rgb(102, 102, 102);
+    height: 100px;
+    width: 100%;
+    border-top: 5px solid black;
+    bottom: 35px;
+    text-align: center;
+}
+
+#playbackSpeed {
+    position: absolute;
+    height: 35px;
+    width: 100%;
+    border-top: 5px solid black;
+    background-color: rgb(102, 102, 102);
+    bottom: 0px;
+}
+
+#playbackText {
+    position: absolute;
+    left: 10px;
+    transform: translate(0, -15px);
+}
+
+#playBackSpeedSelect {
+    position: absolute;
+    right: 35px;
+    transform: translate(0, 5px);
+}
+
+#videoTemp {
+    display: none;
+}
+
+#bottomTimelineControls {
+    position: absolute;
+    /* box-sizing: border-box; */
+    background-color: rgb(102, 102, 102);
+    border-top: 5px solid black;
+    width: calc(100vw - 325px);
+    height: 155px;
+    left: 255px;
+    transform: translateY(631px)}
 
 #playPauseButtonContainer {
     position: fixed;
@@ -33,7 +151,7 @@ body {
     border-top: 5px solid black;
     border-bottom: 5px solid black;
     border-right: 5px solid black;
-    width: 50px;;
+    width: 50px;
     right: 0px;
     bottom: 43px;
 }
@@ -99,74 +217,114 @@ body {
     transform: translate(-2px, -2px);
 }
 
-#leftSidePopup {
-    position: fixed;
-    top: 120px;
-    bottom: 43px;
-    left: 0;
-    background-color: lightgray;
-    border: 5px solid black;
-    width: 250px;
-    color: whitesmoke;
+
+.cameraTableTD {
+    background-color: #393939;
+    border-bottom: 3px solid rgb(0, 0, 0);
+    border-right: 3px solid rgb(0, 0, 0);
+    padding-left: 5px;
 }
 
-label {
-    color: whitesmoke;
+#cameraTableTH {
+    background-color: #393939;
+    border-right: 3px solid rgb(0, 0, 0);
+    border-bottom: 3px solid rgb(0, 0, 0);
+    box-sizing: border-box;
+    width: 10%;
 }
 
-#step1selectcameras {
-    position: absolute;
+.dataColumn {
+    background-color: #797979;
+    /* border-right: 1px solid whitesmoke; */
+    border-bottom: 3px solid rgb(0, 0, 0);
+    transition: all 0.2s;
+}
+
+.dataColumnHeader  {
+    background-color: #393939;
+    border-right: 1px solid #797979;
+    border-bottom: 3px solid rgb(0, 0, 0);
+    transition: all 0.2s;
+}
+
+.dataColumnHeader:hover  {
+    background-color: #7592e0;
+    cursor: pointer;
+}
+
+.cameraTableTR {
+    padding-left: 5px;
+}
+
+
+.fadeElement {
+    background: linear-gradient(to top, rgba(97,97,97, 100) 50%, rgba(255,255,255,0) 100%)
+}
+
+.downloadTotal {
+    border-top: 3px solid black;
+    border-left: 250px solid transparent;
+    border-right: 250px solid transparent;
+    padding: 3px;
+}
+
+.progressBar {
+    position: relative;
+    width: 50%;
+    height: 2px;
+    background-color: #888888;
+    border: 3px solid rgb(0, 0, 0); /* This creates the white line */
+    border-radius: 25px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    transform: translate(48%, 85%);
+}
+
+.progressBarProgress {
+    height: 100%;
+    background-color: #000000;
+    transition: width 0.1s;
+}
+
+#playerControls {
+    width: 70px;
+    height: 125px;
     background-color: rgb(102, 102, 102);
-    /* Magic sauce for this scroll space, 100% of the view height offset by 550px, which works for some reason */
-    height: calc(100vh -  550px);
-    top: 0px;
-    width: 100%;
-    bottom: 375px;
-    text-align: center;
-    overflow-y: auto;
-}
-
-#step2selecttime {
+    box-sizing: border-box;
+    border-left: 5px solid black;
+    border-right: 5px solid black;
     position: absolute;
-    background-color: rgb(102, 102, 102);
-    height: 275px;
-    width: 100%;
-    border-top: 5px solid black;
-    bottom: 100px;
-    text-align: center;
+    transform: translateY(636px);
+    right: 0;
 }
 
-#step3submittoserver {
+#playButtonElement, #selectButtonElement, #exportButtonElement {
+    transition: all 0.3s;
+}
+
+#playButtonElement:hover, #selectButtonElement:hover, #exportButtonElement:hover {
+    background-color: #7592e0;    
+}
+
+#scrubHandle {
+    width: 5px;
+    height: 100%;
     position: absolute;
-    background-color: rgb(102, 102, 102);
-    height: 100px;
-    width: 100%;
-    border-top: 5px solid black;
-    bottom: 35px;
-    text-align: center;
+    background-color: black;
+    box-sizing: border-box;
+    z-index: 99;
+    top: 0;
+    cursor: pointer;
+    transition: color 0.3s;
 }
 
-#playbackSpeed {
+#scrubHandleTringle {
     position: absolute;
-    height: 35px;
-    width: 100%;
-    border-top: 5px solid black;
-    background-color: rgb(102, 102, 102);
-    bottom: 0px;
-}
-
-#playbackText {
-    position: absolute;
-    left: 10px;
-    transform: translate(0, -15px);
-}
-
-#playBackSpeedSelect {
-    position: absolute;
-    right: 35px;
-    transform: translate(0, 5px);
-}
-
-#videoTemp {
-    display: none;
+    width: 0;
+    height: 0;
+    left: calc(10% - 15px);
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-top: 15px solid black;
+    transition: color 0.3s;
 }

@@ -722,8 +722,8 @@ def search_m3u8request():
             # Array to hold m3u8 strings
             m3u8StringArray = []
             
-            print("From " + str(fromDateObject))
-            print("To " + str(toDateObject))
+            # print("From " + str(fromDateObject))
+            # print("To " + str(toDateObject))
             
             # Loop to generate m3u8 data
             
@@ -731,7 +731,7 @@ def search_m3u8request():
                 # Future Check, does user have access to camera?
             
                 urlList = []
-                m3u8ObjectTextToSend = m3u8.M3U8()
+                urlArrayString = []
                 
                 cameraName = cameraNameSpace.replace(" ", "-")
                 # Open m3u8
@@ -743,26 +743,16 @@ def search_m3u8request():
                 for segment in m3u8PlaylistObject.segments:
                     segmentDate = segment.program_date_time.replace(tzinfo=None)
                     if fromDateObject <= segmentDate <= toDateObject:
-                        # print(segmentDate)
+                        print(segmentDate)
+                        print(segment.uri)
                         urlList.append(segment.uri)
                         # How do I get server address? Use stunServer, should always be this zemond box
                         baseFileName = (os.path.basename(segment.uri))
                         newUri = '/search/grabVideoFromStorage/' + cameraName + '/' + baseFileName
-                        # Rewrite URI to reflect server and not local directory
-                        segment.uri = newUri
-                        segment.discontinuity = True
-                        m3u8ObjectTextToSend.segments.append(segment)
-                
-                m3u8ObjectTextToSend.target_duration = 60
-                m3u8ObjectTextToSend.media_sequence = 0
-                m3u8ObjectTextToSend.playlist_type = 'VOD'
-                m3u8ObjectTextToSend.version = 3
-                m3u8ObjectTextToSend.is_endlist = True
-                
-                m3u8PlainText = m3u8ObjectTextToSend.dumps()
+                        urlArrayString.append(newUri)
                 
                 # Add generated m3u8 to m3u8StringArray
-                m3u8StringArray.append(m3u8PlainText)
+                m3u8StringArray.append("*".join(urlArrayString))
                 
             # Loop finished
             # Generate string response from array with | seperator
@@ -792,11 +782,11 @@ def search_grabVideoFromStorage(cameraName, videoFileName):
     if (auditUser(current_user.username, "permissionRoot.search")):
         try:
             # FUTURE CHECK, does user have access to camera?
-            if '.ts' in videoFileName:
+            if '.mp4' in videoFileName:
                 fileNameDiskUri = ('/zemond-storage/' + cameraName + '/' + videoFileName)
-                return send_file(fileNameDiskUri, mimetype='video/MP2T', as_attachment=False, conditional=True)
+                return send_file(fileNameDiskUri, mimetype='video/mp4', as_attachment=False, conditional=True)
             else:
-                return make_response("REQUEST NOT FOR TS FILE", 404)
+                return make_response("REQUEST NOT FOR MP4 FILE", 404)
         except Exception as e:
             return make_response("404 FILE NOT FOUND", 404)
     else:

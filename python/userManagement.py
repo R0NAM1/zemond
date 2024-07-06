@@ -1,5 +1,5 @@
-import cryptocode, json
-from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest
+import cryptocode, json, traceback
+from globalFunctions import passwordRandomKey, myCursor, myDatabase, sendONVIFRequest, doDatabaseQuery
 from permissionTree import permissionTreeObject
 from datetime import datetime, timezone
 
@@ -89,63 +89,67 @@ def auditUser(username, permissionString):
             break
     # If not a misspelling, check if user had permission
     if permExist == True:
-        try:
-        # Call user database check if has permission
-            myCursor.execute("Select permissions from userTable WHERE username='{0}'".format(username))
-            userPermissions = myCursor.fetchall()
-            userPermissionsProcessed = userPermissions[0]
-        # If any of the users permissions match the inputted one, allow.
-            for permission in userPermissionsProcessed[0]:
-                # print(permission)
-                # print(permissionString)
-                if permission == permissionString:
-                    return True
-                
-                # IF the permission has a wildcard, trim back and check
-                elif '*' in permission:
-                    permissionTree = permissionTreeObject
-                    # If wildcard, check how far it goes:
-                    permissionsplit = permission.split('.')                    
-                    for segement in permissionsplit:
-                        # Check to see if it follows the tree structure
-                        if segement in permissionTree:
-                            permissionTree = permissionTree[segement]
-                            # Keep going until the segment is a wildcard, then match
-                        elif segement == '*':
-                            # If the final segment is a wildcard then we need the trim back the wildcard by 1,
-                            # then we have the length we want our permissionString to be so we can compare them, and if they are the same,
-                            # grant access!
-                            # Trim wildcard and get wanted length
-                            splitWildcardPermission = permission.split('.')[:-1]
-                            requiredLength = len(splitWildcardPermission)
-                        
-                            # Split the permission string and trim it back to the wanted length by the difference
-                            splitPermissionString = permissionString.split('.')
-                            splitPermissionStringLength = len(splitPermissionString)
-                            trimDiff = abs(requiredLength - splitPermissionStringLength)
-                            trimmedPermissionString = splitPermissionString[:-trimDiff]
+        while True:
+            try:
+            # Call user database check if has permission
+                # myCursor.execute("Select permissions from userTable WHERE username='{0}'".format(username))
+                # userPermissions = myCursor.fetchall()
+                userPermissions = doDatabaseQuery("Select permissions from userTable WHERE username='{0}'".format(username))
+                userPermissionsProcessed = userPermissions[0]
+            # If any of the users permissions match the inputted one, allow.
+                for permission in userPermissionsProcessed[0]:
+                    # print(permission)
+                    # print(permissionString)
+                    if permission == permissionString:
+                        return True
+                    
+                    # IF the permission has a wildcard, trim back and check
+                    elif '*' in permission:
+                        permissionTree = permissionTreeObject
+                        # If wildcard, check how far it goes:
+                        permissionsplit = permission.split('.')                    
+                        for segement in permissionsplit:
+                            # Check to see if it follows the tree structure
+                            if segement in permissionTree:
+                                permissionTree = permissionTree[segement]
+                                # Keep going until the segment is a wildcard, then match
+                            elif segement == '*':
+                                # If the final segment is a wildcard then we need the trim back the wildcard by 1,
+                                # then we have the length we want our permissionString to be so we can compare them, and if they are the same,
+                                # grant access!
+                                # Trim wildcard and get wanted length
+                                splitWildcardPermission = permission.split('.')[:-1]
+                                requiredLength = len(splitWildcardPermission)
                             
-                            # Reassemble strings and compare
-                            joinString = '.'
-                            reassem_wildcard = joinString.join(splitWildcardPermission)
-                            reassem_permissionString = joinString.join(trimmedPermissionString)
-                            
-                            # print("Your input trimmed: " + str(reassem_permissionString))
-                            # print("The wildcard we are checking against: " + str(reassem_wildcard))
-                            # print("The Trim Back Amount: " + str(trimDiff))
-                            if (reassem_wildcard == reassem_permissionString):
-                                return True
+                                # Split the permission string and trim it back to the wanted length by the difference
+                                splitPermissionString = permissionString.split('.')
+                                splitPermissionStringLength = len(splitPermissionString)
+                                trimDiff = abs(requiredLength - splitPermissionStringLength)
+                                trimmedPermissionString = splitPermissionString[:-trimDiff]
+                                
+                                # Reassemble strings and compare
+                                joinString = '.'
+                                reassem_wildcard = joinString.join(splitWildcardPermission)
+                                reassem_permissionString = joinString.join(trimmedPermissionString)
+                                
+                                # print("Your input trimmed: " + str(reassem_permissionString))
+                                # print("The wildcard we are checking against: " + str(reassem_wildcard))
+                                # print("The Trim Back Amount: " + str(trimDiff))
+                                if (reassem_wildcard == reassem_permissionString):
+                                    return True
 
-                        elif len(permissionTree != 0):
-                            return False
-            
-            # If not send to audit log
-        except Exception as e:
-            print("Exception in Permission Check, follows: " + str(e))
-            pass
-        # Only audit if permission is real and user does not have it
-        sendAuditLog(username, "LOW", "Permission denied, needs '" + permissionString + "' permission")
-        return False
+                            elif len(permissionTree != 0):
+                                return False
+                
+                # If not send to audit log
+            except Exception as e:
+                print("Exception in Permission Check, follows: " + str(e))
+                tb = traceback.format_exc()
+                print("Traceback: " + str(tb))
+                pass
+            # Only audit if permission is real and user does not have it
+            sendAuditLog(username, "LOW", "Permission denied, needs '" + permissionString + "' permission")
+            return False
     
     
 def sendAuditLog(username, loglevel, logmessage):

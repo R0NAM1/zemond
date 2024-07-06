@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "hls.js": "^1.5.4",
+    "mp4box": "^0.5.2",
     "webrtc-adapter": "^8.2.3"
   }
 }
